@@ -18,8 +18,27 @@ def _failure_message(error: Exception) -> str:
     return "BVH 文件处理失败"
 
 
+# async def _send_failure_callback(
+#     client: httpx.AsyncClient,
+#     task_id: str,
+#     payload: ProcessBvhRequest,
+#     error: Exception,
+# ) -> None:
+#     try:
+#         await send_callback(
+#             client,
+#             callback_url=str(payload.callback_url),
+#             action_id=payload.action_id,
+#             success=False,
+#             message=_failure_message(error),
+#         )
+#     except Exception as callback_error:  # noqa: BLE001
+#         # 回调失败不能逃逸到后台任务运行器。
+#         log_callback_failure(task_id, callback_error)
+
 async def _send_failure_callback(
     client: httpx.AsyncClient,
+    settings: Settings,
     task_id: str,
     payload: ProcessBvhRequest,
     error: Exception,
@@ -31,11 +50,11 @@ async def _send_failure_callback(
             action_id=payload.action_id,
             success=False,
             message=_failure_message(error),
+            callback_token=settings.callback_token,
         )
     except Exception as callback_error:  # noqa: BLE001
         # 回调失败不能逃逸到后台任务运行器。
         log_callback_failure(task_id, callback_error)
-
 
 async def run_processing_task(
     client: httpx.AsyncClient,
@@ -60,7 +79,8 @@ async def run_processing_task(
         )
         if resource is not None:
             resource.content.close()
-        await _send_failure_callback(client, task_id, payload, error)
+        # await _send_failure_callback(client, task_id, payload, error)
+        await _send_failure_callback(client, settings, task_id, payload, error)
         return
 
     try:
@@ -70,6 +90,7 @@ async def run_processing_task(
             action_id=payload.action_id,
             success=True,
             message="处理成功",
+            callback_token=settings.callback_token,
             file=result.content,
             filename=processed_filename(result.source_filename),
         )

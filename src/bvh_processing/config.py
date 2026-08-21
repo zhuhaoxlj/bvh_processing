@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     max_file_size_mb: int = 100
     minio_allowed_hosts: str = ""
     callback_allowed_hosts: str = ""
+    callback_token: str = "action-callback-token"
 
     model_config = SettingsConfigDict(
         env_prefix="BVH_",

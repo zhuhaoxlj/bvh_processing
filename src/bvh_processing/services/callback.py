@@ -45,6 +45,32 @@ def _form_fields(action_id: str, success: bool, message: str) -> list[MultipartP
     ]
 
 
+# async def send_callback(
+#     client: httpx.AsyncClient,
+#     *,
+#     callback_url: str,
+#     action_id: str,
+#     success: bool,
+#     message: str,
+#     file: BinaryIO | None = None,
+#     filename: str | None = None,
+# ) -> None:
+#     parts: list[MultipartPart] = _form_fields(action_id, success, message)
+#     if success:
+#         if file is None or filename is None:
+#             raise ValueError("成功回调必须包含处理后的 BVH 文件")
+#         file.seek(0)
+#         parts.append(
+#             (
+#                 "file",
+#                 (filename, file, "application/octet-stream"),
+#             )
+#         )
+
+#     response = await client.post(callback_url, files=parts)
+#     response.raise_for_status()
+
+
 async def send_callback(
     client: httpx.AsyncClient,
     *,
@@ -52,6 +78,7 @@ async def send_callback(
     action_id: str,
     success: bool,
     message: str,
+    callback_token: str | None = None,
     file: BinaryIO | None = None,
     filename: str | None = None,
 ) -> None:
@@ -67,7 +94,11 @@ async def send_callback(
             )
         )
 
-    response = await client.post(callback_url, files=parts)
+    headers = {}
+    if callback_token:
+        headers["X-Callback-Token"] = callback_token
+
+    response = await client.post(callback_url, files=parts, headers=headers)
     response.raise_for_status()
 
 
