@@ -82,7 +82,22 @@ curl -X POST \
 
 ## 处理结果回调
 
-服务通过 `POST callbackUrl` 发起 `multipart/form-data` 请求，不携带鉴权 Token。
+服务通过 `POST callbackUrl` 发起 `multipart/form-data` 请求，并在
+`X-Callback-Token` 请求头携带回调鉴权 Token。
+
+每个选中的处理选项完成后，会先发送一次进度回调：
+
+```text
+actionId=action-42
+success=true
+handleOption=2
+optionStatus=completed
+message=处理选项 2 完成
+```
+
+选项失败时 `success=false`、`optionStatus=failed`，不会上传 `file`。所有选项
+完成后，再发送一次最终回调并携带处理后的 `file`；最终回调不携带
+`handleOption`。
 
 处理成功时包含：
 

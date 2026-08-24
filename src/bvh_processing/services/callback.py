@@ -37,12 +37,23 @@ def validate_callback_url(
         )
 
 
-def _form_fields(action_id: str, success: bool, message: str) -> list[MultipartPart]:
-    return [
+def _form_fields(
+    action_id: str,
+    success: bool,
+    message: str,
+    handle_option: int | None = None,
+    option_status: str | None = None,
+) -> list[MultipartPart]:
+    fields = [
         ("actionId", (None, action_id)),
         ("success", (None, str(success).lower())),
         ("message", (None, message)),
     ]
+    if handle_option is not None:
+        fields.append(("handleOption", (None, str(handle_option))))
+    if option_status is not None:
+        fields.append(("optionStatus", (None, option_status)))
+    return fields
 
 
 # async def send_callback(
@@ -79,11 +90,15 @@ async def send_callback(
     success: bool,
     message: str,
     callback_token: str | None = None,
+    handle_option: int | None = None,
+    option_status: str | None = None,
     file: BinaryIO | None = None,
     filename: str | None = None,
 ) -> None:
-    parts: list[MultipartPart] = _form_fields(action_id, success, message)
-    if success:
+    parts: list[MultipartPart] = _form_fields(
+        action_id, success, message, handle_option, option_status
+    )
+    if success and handle_option is None:
         if file is None or filename is None:
             raise ValueError("成功回调必须包含处理后的 BVH 文件")
         file.seek(0)

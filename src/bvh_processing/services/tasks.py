@@ -32,9 +32,10 @@ def _failure_message(error: Exception) -> str:
 #             success=False,
 #             message=_failure_message(error),
 #         )
-#     except Exception as callback_error:  # noqa: BLE001
+#     except Exception as callback_error:
 #         # 回调失败不能逃逸到后台任务运行器。
 #         log_callback_failure(task_id, callback_error)
+
 
 async def _send_failure_callback(
     client: httpx.AsyncClient,
@@ -42,6 +43,7 @@ async def _send_failure_callback(
     task_id: str,
     payload: ProcessBvhRequest,
     error: Exception,
+    handle_option: int | None = None,
 ) -> None:
     try:
         await send_callback(
@@ -51,10 +53,13 @@ async def _send_failure_callback(
             success=False,
             message=_failure_message(error),
             callback_token=settings.callback_token,
+            handle_option=handle_option,
+            option_status="failed" if handle_option is not None else None,
         )
     except Exception as callback_error:  # noqa: BLE001
         # 回调失败不能逃逸到后台任务运行器。
         log_callback_failure(task_id, callback_error)
+
 
 async def run_processing_task(
     client: httpx.AsyncClient,
@@ -82,6 +87,24 @@ async def run_processing_task(
         # await _send_failure_callback(client, task_id, payload, error)
         await _send_failure_callback(client, settings, task_id, payload, error)
         return
+
+    # Report each selected operation as soon as it finishes.  The current
+    # processing adapter is intentionally a no-op, but keeping these events
+    # here gives the backend a stable contract for real algorithms.
+    for handle_option in payload.handle_options:
+        try:
+            await send_callback(
+                client,
+                callback_url=str(payload.callback_url),
+                action_id=payload.action_id,
+                success=True,
+                message=f"处理选项 {handle_option} 完成",
+                callback_token=settings.callback_token,
+                handle_option=handle_option,
+                option_status="completed",
+            )
+        except Exception as callback_error:  # noqa: BLE001
+            log_callback_failure(task_id, callback_error)
 
     try:
         await send_callback(

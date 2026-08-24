@@ -49,6 +49,10 @@ def test_process_accepts_task_and_callbacks_with_file() -> None:
     assert b'filename="walk_processed.bvh"' in callback_body
     assert BVH_CONTENT in callback_body
     assert b"callbackToken" not in callback_body
+    assert len(callback.calls) == 4
+    progress_bodies = [call.request.content for call in callback.calls[:-1]]
+    assert all(b'name="handleOption"' in body for body in progress_bodies)
+    assert all(b'name="optionStatus"' in body for body in progress_bodies)
 
 
 def test_download_failure_callbacks_without_file() -> None:
