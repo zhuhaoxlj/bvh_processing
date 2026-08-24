@@ -1,0 +1,27 @@
+{
+  "name": "g1-policy-preview-vue",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pure web G1 motion-policy preview built with Vue, MuJoCo WASM and ONNX Runtime Web.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "typecheck": "vue-tsc -b"
+  },
+  "dependencies": {
+    "@mujoco/mujoco": "3.11.0",
+    "onnx-proto": "8.0.1",
+    "onnxruntime-web": "1.27.0",
+    "three": "0.185.1",
+    "vue": "3.5.25"
+  },
+  "devDependencies": {
+    "@types/three": "0.185.0",
+    "@vitejs/plugin-vue": "6.0.2",
+    "typescript": "5.9.3",
+    "vite": "7.2.2",
+    "vue-tsc": "3.1.4"
+  }
+}

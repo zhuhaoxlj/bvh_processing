@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="G1 动作预览器">
+  <defs>
+    <linearGradient id="bg" x1="64" y1="40" x2="448" y2="472" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#152018"/>
+      <stop offset="0.55" stop-color="#0d1410"/>
+      <stop offset="1" stop-color="#0a0f0c"/>
+    </linearGradient>
+    <linearGradient id="body" x1="196" y1="128" x2="328" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e8f2e4"/>
+      <stop offset="1" stop-color="#a8bba8"/>
+    </linearGradient>
+    <linearGradient id="lime" x1="120" y1="100" x2="400" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e8ff9a"/>
+      <stop offset="1" stop-color="#d7ff60"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- App tile -->
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+
+  <!-- Soft grid -->
+  <g opacity="0.14" stroke="#d7ff60" stroke-width="1.5">
+    <path d="M96 176h320M96 256h320M96 336h320"/>
+    <path d="M176 96v320M256 96v320M336 96v320"/>
+  </g>
+
+  <!-- Corner brackets (brand language) -->
+  <g fill="none" stroke="url(#lime)" stroke-width="14" stroke-linecap="square">
+    <path d="M78 138V78h60"/>
+    <path d="M434 138V78h-60"/>
+    <path d="M78 374v60h60"/>
+    <path d="M434 374v60h-60"/>
+  </g>
+
+  <!-- Ground plane -->
+  <ellipse cx="256" cy="398" rx="118" ry="18" fill="#d7ff60" opacity="0.12"/>
+
+  <!-- Robot / humanoid silhouette -->
+  <g fill="url(#body)">
+    <!-- head -->
+    <rect x="226" y="132" width="60" height="52" rx="16"/>
+    <!-- torso -->
+    <rect x="210" y="196" width="92" height="110" rx="22"/>
+    <!-- pelvis -->
+    <rect x="222" y="300" width="68" height="28" rx="12"/>
+    <!-- legs -->
+    <rect x="224" y="328" width="26" height="58" rx="12"/>
+    <rect x="262" y="328" width="26" height="58" rx="12"/>
+    <!-- arms -->
+    <rect x="172" y="206" width="30" height="78" rx="14" transform="rotate(-14 187 245)"/>
+    <rect x="310" y="206" width="30" height="78" rx="14" transform="rotate(14 325 245)"/>
+  </g>
+
+  <!-- Joint accent dots -->
+  <g fill="url(#lime)" filter="url(#glow)">
+    <circle cx="256" cy="188" r="7"/>
+    <circle cx="256" cy="252" r="7"/>
+    <circle cx="237" cy="334" r="6"/>
+    <circle cx="275" cy="334" r="6"/>
+    <circle cx="188" cy="232" r="6"/>
+    <circle cx="324" cy="232" r="6"/>
+  </g>
+
+  <!-- Motion arc (preview / policy path) -->
+  <path
+    d="M148 290c28-52 74-84 108-84s80 32 108 84"
+    fill="none"
+    stroke="url(#lime)"
+    stroke-width="10"
+    stroke-linecap="round"
+    opacity="0.9"
+  />
+  <circle cx="364" cy="290" r="10" fill="url(#lime)"/>
+
+  <!-- Play chevron hint -->
+  <path d="M392 168l34 22-34 22z" fill="url(#lime)" opacity="0.95"/>
+</svg>

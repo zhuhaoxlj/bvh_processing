@@ -1,0 +1,11 @@
+{
+  "version": "g1-mjb-52df1ee691d9fe61",
+  "createdAt": "2026-08-04T05:47:50.910Z",
+  "mjbFile": "g1.mjb",
+  "mjbBytes": 13020288,
+  "meshCount": 35,
+  "rawMeshBytes": 19666440,
+  "decimatedMeshBytes": 2211740,
+  "rawFaces": 393270,
+  "decimatedFaces": 44176
+}
