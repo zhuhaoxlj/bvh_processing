@@ -13,13 +13,13 @@
 uv sync
 uv run uvicorn bvh_processing.main:app \
   --host 0.0.0.0 \
-  --port 8000
+  --port 9001
 ```
 
 启动后可访问：
 
-- Swagger 文档：`http://127.0.0.1:8000/docs`
-- 健康检查：`http://127.0.0.1:8000/health`
+- Swagger 文档：`http://127.0.0.1:9001/docs`
+- 健康检查：`http://127.0.0.1:9001/health`
 
 ## 提交处理任务
 
@@ -40,7 +40,8 @@ uv run uvicorn bvh_processing.main:app \
 
 - `actionId`：业务后端的动作记录 ID，回调时原样返回。
 - `originalFileUrl`：可直接下载的 MinIO BVH 地址。
-- `handleOptions`：整数 JSON 数组，传递给后续平滑算法。
+- `handleOptions`：按顺序执行的整数 JSON 数组。编号含义：`1` 整体去噪、
+  `2` 整体平滑、`3` 脚步锁定校正、`4` 循环优化。
 - `callbackUrl`：处理完成后的回调地址。
 - 请求中不接收 `callbackToken`。
 
@@ -70,7 +71,7 @@ uv run uvicorn bvh_processing.main:app \
 
 ```bash
 curl -X POST \
-  "http://127.0.0.1:8000/api/v1/bvh/process" \
+  "http://127.0.0.1:9001/api/v1/bvh/process" \
   -H "Content-Type: application/json" \
   -d '{
     "actionId":"action-42",

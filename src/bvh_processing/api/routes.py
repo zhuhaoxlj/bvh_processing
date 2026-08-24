@@ -24,6 +24,12 @@ async def health() -> HealthResponse:
 @router.post(
     "/api/v1/bvh/process",
     response_model=ProcessBvhResponse,
+    summary="提交 BVH 处理任务",
+    description=(
+        "异步接收 BVH 处理任务。任务执行期间，服务会对每个选中的处理选项 "
+        "向 callbackUrl 发送一次 multipart/form-data 进度回调；全部完成后，"
+        "再发送一次携带 file 的最终结果回调。"
+    ),
     tags=["bvh"],
 )
 async def process(
