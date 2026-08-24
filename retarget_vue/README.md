@@ -16,6 +16,11 @@ npm run dev
 
 打开 `http://127.0.0.1:5174/`，将 `*_g1_preview.json` 拖入画布；如需对比，再拖入原始 `.bvh`。JSON 里的网格地址指向项目内的 `/assets/unitree_g1/meshes`，这些 STL 文件由前端自动加载，不需要用户单独选择。
 
+仓库内置了一组可直接测试的文件：
+
+- G1 预览 JSON：`assets/motion_demo/Take_007_049_Skeleton7_g1_preview.json`
+- 原始 BVH：`assets/motion_demo/Take_007_049_Skeleton7.bvh`
+
 打包静态资源：
 
 ```bash
