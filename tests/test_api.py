@@ -14,7 +14,20 @@ SOURCE_URL = "https://minio.example.com/motions/walk.bvh"
 CALLBACK_URL = "https://backend.example.com/callbacks/bvh"
 PROGRESS_CALLBACK_URL = "https://backend.example.com/progress-callbacks/bvh"
 PREVIEW_JSON_NAME = "Take_007_049_Skeleton7_g1_preview.json"
-BVH_CONTENT = b"HIERARCHY\nROOT Hips\nMOTION\nFrames: 1\n"
+BVH_CONTENT = b"""HIERARCHY
+ROOT Hips
+{
+  JOINT LeftToe
+  {
+  }
+  JOINT RightToe
+  {
+  }
+}
+MOTION
+Frames: 1
+"""
+UNSUPPORTED_BVH_CONTENT = b"HIERARCHY\nROOT Hips\nMOTION\nFrames: 1\n"
 MERGE_SOURCE_URL_1 = "https://minio.example.com/motions/first.bvh"
 MERGE_SOURCE_URL_2 = "https://minio.example.com/motions/second.bvh"
 MERGE_BVH_1 = b"""HIERARCHY
@@ -22,6 +35,12 @@ ROOT Hips
 {
   OFFSET 0 0 0
   CHANNELS 3 Xposition Yposition Zposition
+  JOINT LeftToe
+  {
+  }
+  JOINT RightToe
+  {
+  }
 }
 MOTION
 Frames: 2
@@ -34,6 +53,12 @@ ROOT Hips
 {
   OFFSET 0 0 0
   CHANNELS 3 Xposition Yposition Zposition
+  JOINT LeftToe
+  {
+  }
+  JOINT RightToe
+  {
+  }
 }
 MOTION
 Frames: 1
@@ -185,6 +210,28 @@ def test_download_failure_callbacks_without_file() -> None:
     assert b"\r\n\r\nfalse\r\n" in callback_body
     assert b"MinIO" in callback_body
     assert b'name="file"' not in callback_body
+
+
+def test_unsupported_bvh_format_callbacks_without_processing() -> None:
+    app = create_app()
+    with respx.mock:
+        respx.get(SOURCE_URL).mock(
+            return_value=Response(200, content=UNSUPPORTED_BVH_CONTENT)
+        )
+        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+        progress_callback = respx.post(PROGRESS_CALLBACK_URL).mock(
+            return_value=Response(204)
+        )
+
+        with TestClient(app) as client:
+            response = client.post("/api/v1/bvh/process", json=_request_body())
+
+    assert response.status_code == 200
+    callback_body = callback.calls.last.request.content
+    assert "只支持LAFAN1格式和Nokov格式的 BVH 文件".encode() in callback_body
+    assert b"\r\n\r\nfalse\r\n" in callback_body
+    assert b'name="file"' not in callback_body
+    assert len(progress_callback.calls) == 0
 
 
 def test_process_rejects_invalid_handle_options() -> None:

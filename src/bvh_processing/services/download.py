@@ -10,6 +10,10 @@ import httpx
 
 from bvh_processing.config import Settings
 from bvh_processing.errors import BvhServiceError
+from bvh_processing.services.classify_bvh import (
+    BVHClassificationError,
+    classify_downloaded_bvh,
+)
 
 _CHUNK_SIZE = 64 * 1024
 _SPOOL_MEMORY_LIMIT = 8 * 1024 * 1024
@@ -106,6 +110,16 @@ async def download_bvh(
             code="empty_source_file",
             message="MinIO 中的 BVH 文件为空",
         )
+
+    try:
+        classify_downloaded_bvh(content)
+    except BVHClassificationError as exc:
+        content.close()
+        raise BvhServiceError(
+            status_code=422,
+            code="unsupported_bvh_format",
+            message="只支持LAFAN1格式和Nokov格式的 BVH 文件",
+        ) from exc
 
     content.seek(0)
     return DownloadedBvh(
