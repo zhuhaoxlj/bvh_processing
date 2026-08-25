@@ -52,9 +52,7 @@ def _classify_joint_names(joint_names: set[str]) -> str:
     if is_nokov:
         return "nokov"
 
-    found_toe_joints = sorted(
-        name for name in joint_names if "toe" in name.lower()
-    )
+    found_toe_joints = sorted(name for name in joint_names if "toe" in name.lower())
     found_description = ", ".join(found_toe_joints) or "none"
     raise BVHClassificationError(
         "Unsupported BVH skeleton: expected LeftToe and RightToe for LAFAN1, "

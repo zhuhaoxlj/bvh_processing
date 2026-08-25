@@ -1,16 +1,11 @@
 import asyncio
 import logging
-from importlib.resources import files
 
 import httpx
 
 from bvh_processing.config import Settings
 from bvh_processing.errors import BvhServiceError
-from bvh_processing.schemas import (
-    MergeBvhRequest,
-    ProcessBvhRequest,
-    RetargetBvhRequest,
-)
+from bvh_processing.schemas import MergeBvhRequest, ProcessBvhRequest
 from bvh_processing.services.callback import (
     log_callback_failure,
     send_callback,
@@ -25,9 +20,6 @@ from bvh_processing.services.processing import (
 
 logger = logging.getLogger(__name__)
 
-_PREVIEW_JSON_NAME = "Take_007_049_Skeleton7_g1_preview.json"
-_ROBOT_TYPE_NAMES = {1: "G1", 2: "H2", 3: "R1"}
-
 
 def _failure_message(error: Exception) -> str:
     if isinstance(error, BvhServiceError):
@@ -39,7 +31,7 @@ async def _send_failure_callback(
     client: httpx.AsyncClient,
     settings: Settings,
     task_id: str,
-    payload: ProcessBvhRequest | MergeBvhRequest | RetargetBvhRequest,
+    payload: ProcessBvhRequest | MergeBvhRequest,
     error: Exception,
     handle_option: int | None = None,
 ) -> None:
@@ -135,55 +127,6 @@ async def run_processing_task(
         log_callback_failure(task_id, callback_error)
     finally:
         resource.content.close()
-
-
-async def run_retarget_task(
-    client: httpx.AsyncClient,
-    settings: Settings,
-    task_id: str,
-    payload: RetargetBvhRequest,
-) -> None:
-    resource: DownloadedBvh | None = None
-    robot_name = _ROBOT_TYPE_NAMES[payload.robot_type]
-    logger.info(
-        "BVH retarget task %s robotType=%d robot=%s",
-        task_id,
-        payload.robot_type,
-        robot_name,
-    )
-    try:
-        # 先下载并校验后端提供的 BVH；真实转换算法后续替换固定 JSON。
-        resource = await download_bvh(
-            client,
-            str(payload.original_file_url),
-            settings,
-        )
-        preview_json = files("bvh_processing").joinpath(
-            "assets",
-            _PREVIEW_JSON_NAME,
-        )
-        with preview_json.open("rb") as result_file:
-            await send_callback(
-                client,
-                callback_url=str(payload.callback_url),
-                action_id=None,
-                success=True,
-                message="重定向 JSON 生成成功",
-                callback_token=settings.callback_token,
-                file=result_file,
-                filename=_PREVIEW_JSON_NAME,
-                file_content_type="application/json",
-            )
-    except Exception as error:  # noqa: BLE001
-        logger.error(
-            "BVH retarget task %s failed: %s",
-            task_id,
-            type(error).__name__,
-        )
-        await _send_failure_callback(client, settings, task_id, payload, error)
-    finally:
-        if resource is not None:
-            resource.content.close()
 
 
 async def run_merge_task(

@@ -5,6 +5,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
 from bvh_processing.config import Settings, get_settings
+from bvh_processing.retargeting.task import run_retarget_task
 from bvh_processing.schemas import (
     HealthResponse,
     MergeBvhRequest,
@@ -13,11 +14,7 @@ from bvh_processing.schemas import (
     RetargetBvhRequest,
 )
 from bvh_processing.services.callback import validate_callback_url
-from bvh_processing.services.tasks import (
-    run_merge_task,
-    run_processing_task,
-    run_retarget_task,
-)
+from bvh_processing.services.tasks import run_merge_task, run_processing_task
 
 router = APIRouter()
 
@@ -67,8 +64,9 @@ async def process(
     response_model=ProcessBvhResponse,
     summary="提交 BVH 重定向任务",
     description=(
-        "异步下载 MinIO 中的 BVH 并生成机器人重定向 JSON。"
-        "完成后通过 callbackUrl 上传 JSON 文件。"
+        "异步下载 MinIO 中的 LAFAN1/Nokov BVH，使用 Robot Retargeter "
+        "重定向为 Unitree G1 动作，并生成 Whole Body Tracking NPZ 和"
+        "元数据 JSON。完成后通过 callbackUrl 一次上传两个文件。"
     ),
     tags=["bvh"],
 )

@@ -1,6 +1,7 @@
 import json
 import logging
-from importlib.resources import files
+from io import BytesIO
+from unittest.mock import patch
 from uuid import UUID
 
 import pytest
@@ -9,11 +10,13 @@ from fastapi.testclient import TestClient
 from httpx import Response
 
 from bvh_processing.main import create_app
+from bvh_processing.retargeting.exporter import RetargetArtifacts
 
 SOURCE_URL = "https://minio.example.com/motions/walk.bvh"
 CALLBACK_URL = "https://backend.example.com/callbacks/bvh"
 PROGRESS_CALLBACK_URL = "https://backend.example.com/progress-callbacks/bvh"
-PREVIEW_JSON_NAME = "Take_007_049_Skeleton7_g1_preview.json"
+RETARGET_NPZ = b"tracking-npz-content"
+RETARGET_JSON = b'{"schema":"whole_body_tracking_motion"}'
 BVH_CONTENT = b"""HIERARCHY
 ROOT Hips
 {
@@ -125,20 +128,32 @@ def test_process_accepts_task_and_callbacks_with_file() -> None:
     assert all(body["originalFileUrl"] == SOURCE_URL for body in progress_bodies)
 
 
-def test_retarget_accepts_task_and_callbacks_with_json_file(
+def test_retarget_accepts_task_and_callbacks_with_npz_and_json(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    caplog.set_level(logging.INFO, logger="bvh_processing.services.tasks")
+    caplog.set_level(
+        logging.INFO,
+        logger="bvh_processing.retargeting.task",
+    )
     payload = {
         "originalFileUrl": SOURCE_URL,
         "robotType": 1,
         "callbackUrl": CALLBACK_URL,
     }
-    expected_json = (
-        files("bvh_processing").joinpath("assets", PREVIEW_JSON_NAME).read_bytes()
+    artifacts = RetargetArtifacts(
+        npz=BytesIO(RETARGET_NPZ),
+        npz_filename="walk_g1_tracking.npz",
+        metadata=BytesIO(RETARGET_JSON),
+        metadata_filename="walk_g1_tracking.json",
     )
 
-    with respx.mock:
+    with (
+        patch(
+            "bvh_processing.retargeting.task.retarget_downloaded_bvh",
+            return_value=artifacts,
+        ),
+        respx.mock,
+    ):
         respx.get(SOURCE_URL).mock(return_value=Response(200, content=BVH_CONTENT))
         callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
 
@@ -153,9 +168,11 @@ def test_retarget_accepts_task_and_callbacks_with_json_file(
 
     callback_body = callback.calls.last.request.content
     assert b'name="actionId"' not in callback_body
+    assert b'filename="walk_g1_tracking.npz"' in callback_body
+    assert b'filename="walk_g1_tracking.json"' in callback_body
     assert b"application/json" in callback_body
-    assert f'filename="{PREVIEW_JSON_NAME}"'.encode() in callback_body
-    assert expected_json in callback_body
+    assert RETARGET_NPZ in callback_body
+    assert RETARGET_JSON in callback_body
     assert "robotType=1 robot=G1" in caplog.text
 
 

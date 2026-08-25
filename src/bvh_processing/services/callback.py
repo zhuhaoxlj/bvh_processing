@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import BinaryIO
 from urllib.parse import urlsplit
 
@@ -10,6 +12,13 @@ logger = logging.getLogger(__name__)
 
 MultipartValue = tuple[None, str] | tuple[str, BinaryIO, str]
 MultipartPart = tuple[str, MultipartValue]
+
+
+@dataclass(frozen=True, slots=True)
+class CallbackFile:
+    content: BinaryIO
+    filename: str
+    content_type: str = "application/octet-stream"
 
 
 def validate_callback_url(
@@ -70,20 +79,32 @@ async def send_callback(
     file: BinaryIO | None = None,
     filename: str | None = None,
     file_content_type: str = "application/octet-stream",
+    attachments: Sequence[CallbackFile] = (),
 ) -> None:
     parts: list[MultipartPart] = _form_fields(
         action_id, success, message, handle_option, option_status
     )
     if success and handle_option is None:
-        if file is None or filename is None:
-            raise ValueError("成功回调必须包含处理后的 BVH 文件")
-        file.seek(0)
-        parts.append(
-            (
-                "file",
-                (filename, file, file_content_type),
+        callback_files = list(attachments)
+        if file is not None and filename is not None:
+            callback_files.insert(
+                0,
+                CallbackFile(file, filename, file_content_type),
             )
-        )
+        if not callback_files:
+            raise ValueError("成功回调必须包含处理后的文件")
+        for callback_file in callback_files:
+            callback_file.content.seek(0)
+            parts.append(
+                (
+                    "file",
+                    (
+                        callback_file.filename,
+                        callback_file.content,
+                        callback_file.content_type,
+                    ),
+                )
+            )
 
     headers = {}
     if callback_token:
