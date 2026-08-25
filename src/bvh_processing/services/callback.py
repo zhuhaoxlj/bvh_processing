@@ -55,33 +55,6 @@ def _form_fields(
         fields.append(("optionStatus", (None, option_status)))
     return fields
 
-
-# async def send_callback(
-#     client: httpx.AsyncClient,
-#     *,
-#     callback_url: str,
-#     action_id: str,
-#     success: bool,
-#     message: str,
-#     file: BinaryIO | None = None,
-#     filename: str | None = None,
-# ) -> None:
-#     parts: list[MultipartPart] = _form_fields(action_id, success, message)
-#     if success:
-#         if file is None or filename is None:
-#             raise ValueError("成功回调必须包含处理后的 BVH 文件")
-#         file.seek(0)
-#         parts.append(
-#             (
-#                 "file",
-#                 (filename, file, "application/octet-stream"),
-#             )
-#         )
-
-#     response = await client.post(callback_url, files=parts)
-#     response.raise_for_status()
-
-
 async def send_callback(
     client: httpx.AsyncClient,
     *,
@@ -123,3 +96,32 @@ def log_callback_failure(task_id: str, error: Exception) -> None:
         task_id,
         type(error).__name__,
     )
+
+
+async def send_progress_callback(
+    client: httpx.AsyncClient,
+    *,
+    progress_url: str,
+    action_id: str,
+    original_file_url: str,
+    progress: int,
+    step: int,
+    step_code: str,
+    message: str,
+    callback_token: str | None = None,
+) -> None:
+    headers: dict[str, str] = {}
+    if callback_token:
+        headers["X-Callback-Token"] = callback_token
+
+    payload = {
+        "actionId": action_id,
+        "originalFileUrl": original_file_url,
+        "progress": progress,
+        "step": step,
+        "stepCode": step_code,
+        "message": message,
+    }
+
+    response = await client.post(progress_url, json=payload, headers=headers)
+    response.raise_for_status()

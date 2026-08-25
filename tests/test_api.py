@@ -1,3 +1,4 @@
+import json
 from uuid import UUID
 
 import respx
@@ -8,6 +9,7 @@ from bvh_processing.main import create_app
 
 SOURCE_URL = "https://minio.example.com/motions/walk.bvh"
 CALLBACK_URL = "https://backend.example.com/callbacks/bvh"
+PROGRESS_CALLBACK_URL = "https://backend.example.com/progress-callbacks/bvh"
 BVH_CONTENT = b"HIERARCHY\nROOT Hips\nMOTION\nFrames: 1\n"
 MERGE_SOURCE_URL_1 = "https://minio.example.com/motions/first.bvh"
 MERGE_SOURCE_URL_2 = "https://minio.example.com/motions/second.bvh"
@@ -56,6 +58,9 @@ def test_process_accepts_task_and_callbacks_with_file() -> None:
             )
         )
         callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+        progress_callback = respx.post(PROGRESS_CALLBACK_URL).mock(
+            return_value=Response(204)
+        )
 
         with TestClient(app) as client:
             response = client.post("/api/v1/bvh/process", json=_request_body())
@@ -74,10 +79,21 @@ def test_process_accepts_task_and_callbacks_with_file() -> None:
     assert b'filename="walk_processed.bvh"' in callback_body
     assert BVH_CONTENT in callback_body
     assert b"callbackToken" not in callback_body
-    assert len(callback.calls) == 4
-    progress_bodies = [call.request.content for call in callback.calls[:-1]]
-    assert all(b'name="handleOption"' in body for body in progress_bodies)
-    assert all(b'name="optionStatus"' in body for body in progress_bodies)
+    assert len(callback.calls) == 1
+    assert len(progress_callback.calls) == 3
+
+    progress_bodies = [
+        json.loads(call.request.content) for call in progress_callback.calls
+    ]
+    assert [body["progress"] for body in progress_bodies] == [35, 65, 95]
+    assert [body["step"] for body in progress_bodies] == [2, 3, 4]
+    assert [body["stepCode"] for body in progress_bodies] == [
+        "DENOISE",
+        "SMOOTH_FRAME",
+        "FOOT_LOCK",
+    ]
+    assert all(body["actionId"] == "action-42" for body in progress_bodies)
+    assert all(body["originalFileUrl"] == SOURCE_URL for body in progress_bodies)
 
 
 def test_download_failure_callbacks_without_file() -> None:
