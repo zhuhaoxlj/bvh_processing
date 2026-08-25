@@ -38,28 +38,30 @@ def validate_callback_url(
 
 
 def _form_fields(
-    action_id: str,
+    action_id: str | None,
     success: bool,
     message: str,
     handle_option: int | None = None,
     option_status: str | None = None,
 ) -> list[MultipartPart]:
     fields = [
-        ("actionId", (None, action_id)),
         ("success", (None, str(success).lower())),
         ("message", (None, message)),
     ]
+    if action_id is not None:
+        fields.insert(0, ("actionId", (None, action_id)))
     if handle_option is not None:
         fields.append(("handleOption", (None, str(handle_option))))
     if option_status is not None:
         fields.append(("optionStatus", (None, option_status)))
     return fields
 
+
 async def send_callback(
     client: httpx.AsyncClient,
     *,
     callback_url: str,
-    action_id: str,
+    action_id: str | None,
     success: bool,
     message: str,
     callback_token: str | None = None,
@@ -67,6 +69,7 @@ async def send_callback(
     option_status: str | None = None,
     file: BinaryIO | None = None,
     filename: str | None = None,
+    file_content_type: str = "application/octet-stream",
 ) -> None:
     parts: list[MultipartPart] = _form_fields(
         action_id, success, message, handle_option, option_status
@@ -78,7 +81,7 @@ async def send_callback(
         parts.append(
             (
                 "file",
-                (filename, file, "application/octet-stream"),
+                (filename, file, file_content_type),
             )
         )
 

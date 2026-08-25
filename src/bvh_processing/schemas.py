@@ -26,6 +26,26 @@ class ProcessBvhRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
+class RetargetBvhRequest(BaseModel):
+    original_file_url: AnyHttpUrl = Field(
+        alias="originalFileUrl",
+        description="可直接下载 BVH 文件的 MinIO 地址",
+    )
+    robot_type: int = Field(
+        alias="robotType",
+        strict=True,
+        ge=1,
+        le=3,
+        description="机器人类型：1 G1，2 H2，3 R1",
+    )
+    callback_url: AnyHttpUrl = Field(
+        alias="callbackUrl",
+        description="重定向 JSON 结果回调地址",
+    )
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
 class ProcessBvhResponse(BaseModel):
     success: bool = Field(description="是否成功接收任务，不代表最终处理成功")
     task_id: str | None = Field(alias="taskId", description="异步任务 ID")

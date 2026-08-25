@@ -1,6 +1,9 @@
 import json
+import logging
+from importlib.resources import files
 from uuid import UUID
 
+import pytest
 import respx
 from fastapi.testclient import TestClient
 from httpx import Response
@@ -10,6 +13,7 @@ from bvh_processing.main import create_app
 SOURCE_URL = "https://minio.example.com/motions/walk.bvh"
 CALLBACK_URL = "https://backend.example.com/callbacks/bvh"
 PROGRESS_CALLBACK_URL = "https://backend.example.com/progress-callbacks/bvh"
+PREVIEW_JSON_NAME = "Take_007_049_Skeleton7_g1_preview.json"
 BVH_CONTENT = b"HIERARCHY\nROOT Hips\nMOTION\nFrames: 1\n"
 MERGE_SOURCE_URL_1 = "https://minio.example.com/motions/first.bvh"
 MERGE_SOURCE_URL_2 = "https://minio.example.com/motions/second.bvh"
@@ -94,6 +98,75 @@ def test_process_accepts_task_and_callbacks_with_file() -> None:
     ]
     assert all(body["actionId"] == "action-42" for body in progress_bodies)
     assert all(body["originalFileUrl"] == SOURCE_URL for body in progress_bodies)
+
+
+def test_retarget_accepts_task_and_callbacks_with_json_file(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="bvh_processing.services.tasks")
+    payload = {
+        "originalFileUrl": SOURCE_URL,
+        "robotType": 1,
+        "callbackUrl": CALLBACK_URL,
+    }
+    expected_json = (
+        files("bvh_processing").joinpath("assets", PREVIEW_JSON_NAME).read_bytes()
+    )
+
+    with respx.mock:
+        respx.get(SOURCE_URL).mock(return_value=Response(200, content=BVH_CONTENT))
+        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+
+        with TestClient(create_app()) as client:
+            response = client.post("/api/v1/bvh/retarget", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["message"] == "重定向任务已接收"
+    UUID(response.json()["taskId"])
+    assert len(callback.calls) == 1
+
+    callback_body = callback.calls.last.request.content
+    assert b'name="actionId"' not in callback_body
+    assert b"application/json" in callback_body
+    assert f'filename="{PREVIEW_JSON_NAME}"'.encode() in callback_body
+    assert expected_json in callback_body
+    assert "robotType=1 robot=G1" in caplog.text
+
+
+def test_retarget_download_failure_callbacks_without_file() -> None:
+    payload = {
+        "originalFileUrl": SOURCE_URL,
+        "robotType": 1,
+        "callbackUrl": CALLBACK_URL,
+    }
+    with respx.mock:
+        respx.get(SOURCE_URL).mock(return_value=Response(404))
+        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+
+        with TestClient(create_app()) as client:
+            response = client.post("/api/v1/bvh/retarget", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    callback_body = callback.calls.last.request.content
+    assert b'name="actionId"' not in callback_body
+    assert b"false" in callback_body
+    assert b'name="file"' not in callback_body
+
+
+def test_retarget_rejects_invalid_robot_type() -> None:
+    payload = {
+        "originalFileUrl": SOURCE_URL,
+        "robotType": 4,
+        "callbackUrl": CALLBACK_URL,
+    }
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/v1/bvh/retarget", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["success"] is False
 
 
 def test_download_failure_callbacks_without_file() -> None:

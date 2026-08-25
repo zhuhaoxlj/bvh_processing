@@ -10,9 +10,14 @@ from bvh_processing.schemas import (
     MergeBvhRequest,
     ProcessBvhRequest,
     ProcessBvhResponse,
+    RetargetBvhRequest,
 )
 from bvh_processing.services.callback import validate_callback_url
-from bvh_processing.services.tasks import run_merge_task, run_processing_task
+from bvh_processing.services.tasks import (
+    run_merge_task,
+    run_processing_task,
+    run_retarget_task,
+)
 
 router = APIRouter()
 
@@ -54,6 +59,40 @@ async def process(
         success=True,
         taskId=task_id,
         message="任务已接收",
+    )
+
+
+@router.post(
+    "/api/v1/bvh/retarget",
+    response_model=ProcessBvhResponse,
+    summary="提交 BVH 重定向任务",
+    description=(
+        "异步下载 MinIO 中的 BVH 并生成机器人重定向 JSON。"
+        "完成后通过 callbackUrl 上传 JSON 文件。"
+    ),
+    tags=["bvh"],
+)
+async def retarget(
+    payload: RetargetBvhRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ProcessBvhResponse:
+    validate_callback_url(str(payload.callback_url), settings.allowed_callback_hosts)
+
+    task_id = str(uuid4())
+    client: httpx.AsyncClient = request.app.state.http_client
+    background_tasks.add_task(
+        run_retarget_task,
+        client,
+        settings,
+        task_id,
+        payload,
+    )
+    return ProcessBvhResponse(
+        success=True,
+        taskId=task_id,
+        message="重定向任务已接收",
     )
 
 

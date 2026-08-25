@@ -83,6 +83,61 @@ curl -X POST \
   }'
 ```
 
+## 提交 BVH 重定向任务
+
+### `POST /api/v1/bvh/retarget`
+
+后端提供一个可下载的 MinIO BVH 地址。服务下载 BVH 后生成机器人重定向 JSON，
+当前联调阶段固定返回内置的
+`Take_007_049_Skeleton7_g1_preview.json`，后续在后台任务中接入真实转换算法。
+
+请求：
+
+```json
+{
+  "originalFileUrl": "https://minio.example.com/bucket/walk.bvh",
+  "robotType": 1,
+  "callbackUrl": "https://backend.example.com/callbacks/bvh-preview"
+}
+```
+
+`robotType` 必须是整数：`1` 表示 G1、`2` 表示 H2、`3` 表示 R1。
+服务当前会记录该类型，后续用于选择对应机器人的转换算法。
+
+任务接收后立即返回：
+
+```json
+{
+  "success": true,
+  "taskId": "a37d60af-6b3d-4612-b88e-3ba1e4e24f6f",
+  "message": "重定向任务已接收"
+}
+```
+
+下载成功后，服务向 `callbackUrl` 发送一次 `multipart/form-data` 回调：
+
+```text
+success=true
+message=重定向 JSON 生成成功
+file=<Take_007_049_Skeleton7_g1_preview.json 文件内容>
+```
+
+文件部分的媒体类型为 `application/json`。下载或生成失败时，回调中
+`success=false` 且不包含 `file`。
+
+提交示例：
+
+```bash
+curl -X POST \
+  "http://127.0.0.1:9001/api/v1/bvh/retarget" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "originalFileUrl":"https://minio.example.com/bucket/walk.bvh",
+    "robotType":1,
+    "callbackUrl":"https://backend.example.com/callbacks/bvh-preview"
+  }'
+```
+
 ## 提交多文件合并任务
 
 ### `POST /api/v1/bvh/merge`
