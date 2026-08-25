@@ -1,6 +1,8 @@
 # BVH Processing API
 
-异步接收 BVH 处理任务，从 MinIO 下载原始 BVH，并通过 `multipart/form-data` 将处理结果回调给业务后端。当前联调版本暂不修改文件内容，后续平滑算法统一接入 `services/processing.py`。
+异步接收 BVH 单文件处理和多文件合并任务，从 MinIO 下载原始 BVH，并通过
+`multipart/form-data` 将处理结果回调给业务后端。单文件处理的平滑算法后续统一
+接入 `services/processing.py`；多文件合并已实现帧级拼接和间隔帧生成。
 
 ## 环境要求
 
@@ -77,6 +79,78 @@ curl -X POST \
     "actionId":"action-42",
     "originalFileUrl":"https://minio.example.com/bucket/walk.bvh",
     "handleOptions":[1,2,3],
+    "callbackUrl":"https://backend.example.com/callbacks/bvh"
+  }'
+```
+
+## 提交多文件合并任务
+
+### `POST /api/v1/bvh/merge`
+
+请求：
+
+```json
+{
+  "actionId": "action-merge-42",
+  "fileUrls": [
+    "https://minio.example.com/bucket/walk.bvh",
+    "https://minio.example.com/bucket/idle.bvh",
+    "https://minio.example.com/bucket/run.bvh"
+  ],
+  "intervalsSeconds": [5, 1],
+  "callbackUrl": "https://backend.example.com/callbacks/bvh"
+}
+```
+
+字段说明：
+
+- `fileUrls`：BVH 下载地址数组，按照需要合并的顺序传递，至少包含两个文件。
+- `intervalsSeconds`：相邻文件之间的间隔秒数。数量必须等于
+  `fileUrls` 数量减一；例如 `[5, 1]` 表示第 1、2 个文件间隔 5 秒，
+  第 2、3 个文件间隔 1 秒。
+- `actionId` 和 `callbackUrl` 的含义与单文件处理接口相同。
+
+任务接收后立即返回：
+
+```json
+{
+  "success": true,
+  "taskId": "a37d60af-6b3d-4612-b88e-3ba1e4e24f6f",
+  "message": "合并任务已接收"
+}
+```
+
+任务在后台下载并解析全部文件。合并时有以下约束：
+
+- 文件必须是 UTF-8 编码的有效 BVH。
+- 所有文件必须具有相同的骨架层级、通道数量和 `Frame Time`。
+- 间隔秒数会根据 `Frame Time` 四舍五入换算成帧数。
+- 间隔帧复制前一个 BVH 的最后一帧，使角色在间隔期间保持上一姿势。
+
+处理成功后，服务向 `callbackUrl` 发送一次 `multipart/form-data` 回调：
+
+```text
+actionId=action-merge-42
+success=true
+message=BVH 合并成功
+file=<walk_merged.bvh 文件内容>
+```
+
+下载、解析或兼容性校验失败时，回调中 `success=false` 且不包含 `file`。
+
+提交示例：
+
+```bash
+curl -X POST \
+  "http://127.0.0.1:9001/api/v1/bvh/merge" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "actionId":"action-merge-42",
+    "fileUrls":[
+      "https://minio.example.com/bucket/walk.bvh",
+      "https://minio.example.com/bucket/run.bvh"
+    ],
+    "intervalsSeconds":[5],
     "callbackUrl":"https://backend.example.com/callbacks/bvh"
   }'
 ```

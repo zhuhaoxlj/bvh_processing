@@ -1,13 +1,18 @@
+import asyncio
 import logging
 
 import httpx
 
 from bvh_processing.config import Settings
 from bvh_processing.errors import BvhServiceError
-from bvh_processing.schemas import ProcessBvhRequest
+from bvh_processing.schemas import MergeBvhRequest, ProcessBvhRequest
 from bvh_processing.services.callback import log_callback_failure, send_callback
 from bvh_processing.services.download import DownloadedBvh, download_bvh
-from bvh_processing.services.processing import process_bvh, processed_filename
+from bvh_processing.services.processing import (
+    merge_bvh_files,
+    process_bvh,
+    processed_filename,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +46,7 @@ async def _send_failure_callback(
     client: httpx.AsyncClient,
     settings: Settings,
     task_id: str,
-    payload: ProcessBvhRequest,
+    payload: ProcessBvhRequest | MergeBvhRequest,
     error: Exception,
     handle_option: int | None = None,
 ) -> None:
@@ -122,3 +127,44 @@ async def run_processing_task(
         log_callback_failure(task_id, callback_error)
     finally:
         resource.content.close()
+
+
+async def run_merge_task(
+    client: httpx.AsyncClient,
+    settings: Settings,
+    task_id: str,
+    payload: MergeBvhRequest,
+) -> None:
+    resources: list[DownloadedBvh] = []
+    result: DownloadedBvh | None = None
+    try:
+        for file_url in payload.file_urls:
+            resources.append(await download_bvh(client, str(file_url), settings))
+        # BVH 解析和大量帧写入属于阻塞工作，放在线程中避免阻塞事件循环。
+        result = await asyncio.to_thread(
+            merge_bvh_files,
+            resources,
+            payload.intervals_seconds,
+        )
+        await send_callback(
+            client,
+            callback_url=str(payload.callback_url),
+            action_id=payload.action_id,
+            success=True,
+            message="BVH 合并成功",
+            callback_token=settings.callback_token,
+            file=result.content,
+            filename=result.source_filename,
+        )
+    except Exception as error:  # noqa: BLE001
+        logger.error(
+            "BVH merge task %s failed: %s",
+            task_id,
+            type(error).__name__,
+        )
+        await _send_failure_callback(client, settings, task_id, payload, error)
+    finally:
+        if result is not None:
+            result.content.close()
+        for resource in resources:
+            resource.content.close()

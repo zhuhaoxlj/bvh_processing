@@ -7,11 +7,12 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from bvh_processing.config import Settings, get_settings
 from bvh_processing.schemas import (
     HealthResponse,
+    MergeBvhRequest,
     ProcessBvhRequest,
     ProcessBvhResponse,
 )
 from bvh_processing.services.callback import validate_callback_url
-from bvh_processing.services.tasks import run_processing_task
+from bvh_processing.services.tasks import run_merge_task, run_processing_task
 
 router = APIRouter()
 
@@ -53,4 +54,39 @@ async def process(
         success=True,
         taskId=task_id,
         message="任务已接收",
+    )
+
+
+@router.post(
+    "/api/v1/bvh/merge",
+    response_model=ProcessBvhResponse,
+    summary="提交多个 BVH 合并任务",
+    description=(
+        "按 fileUrls 的顺序异步合并多个 BVH。intervalsSeconds 中的每个值"
+        "表示对应两个文件之间的间隔秒数；间隔帧保持前一个文件的最后姿势。"
+        "完成后通过 callbackUrl 上传合并文件。"
+    ),
+    tags=["bvh"],
+)
+async def merge(
+    payload: MergeBvhRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ProcessBvhResponse:
+    validate_callback_url(str(payload.callback_url), settings.allowed_callback_hosts)
+
+    task_id = str(uuid4())
+    client: httpx.AsyncClient = request.app.state.http_client
+    background_tasks.add_task(
+        run_merge_task,
+        client,
+        settings,
+        task_id,
+        payload,
+    )
+    return ProcessBvhResponse(
+        success=True,
+        taskId=task_id,
+        message="合并任务已接收",
     )

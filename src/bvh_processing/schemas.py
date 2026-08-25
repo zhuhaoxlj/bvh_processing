@@ -1,4 +1,4 @@
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, model_validator
 
 
 class ProcessBvhRequest(BaseModel):
@@ -32,6 +32,42 @@ class ProcessBvhResponse(BaseModel):
     message: str = Field(description="接收结果说明")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class MergeBvhRequest(BaseModel):
+    action_id: str = Field(
+        alias="actionId",
+        min_length=1,
+        description="业务后端的动作记录 ID",
+    )
+    file_urls: list[AnyHttpUrl] = Field(
+        alias="fileUrls",
+        min_length=2,
+        description="按合并顺序排列的 BVH 文件下载地址，至少两个",
+    )
+    intervals_seconds: list[float] = Field(
+        alias="intervalsSeconds",
+        description="相邻 BVH 文件之间的间隔秒数，数量必须比文件数量少一个",
+    )
+    callback_url: AnyHttpUrl = Field(
+        alias="callbackUrl",
+        description="合并完成后的结果回调地址",
+    )
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        extra="forbid",
+        allow_inf_nan=False,
+    )
+
+    @model_validator(mode="after")
+    def validate_intervals(self) -> "MergeBvhRequest":
+        expected_count = len(self.file_urls) - 1
+        if len(self.intervals_seconds) != expected_count:
+            raise ValueError(f"intervalsSeconds 必须包含 {expected_count} 个间隔")
+        if any(interval < 0 for interval in self.intervals_seconds):
+            raise ValueError("间隔秒数不能为负数")
+        return self
 
 
 class HealthResponse(BaseModel):
