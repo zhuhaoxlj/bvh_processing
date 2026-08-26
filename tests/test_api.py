@@ -74,6 +74,26 @@ Frames: 1
 Frame Time: 0.05
 2 2 2
 """
+MERGE_BVH_HIGH_FPS = b"""HIERARCHY
+ROOT Hips
+{
+  OFFSET 0 0 0
+  CHANNELS 3 Xposition Yposition Zposition
+  JOINT LeftToe
+  {
+  }
+  JOINT RightToe
+  {
+  }
+}
+MOTION
+Frames: 4
+Frame Time: 0.025
+0 0 0
+1 1 1
+2 2 2
+3 3 3
+"""
 
 
 def _request_body() -> dict[str, object]:
@@ -438,6 +458,33 @@ def test_merge_accepts_task_and_callbacks_with_merged_file() -> None:
     assert b'filename="first_merged.bvh"' in callback_body
     assert b"Frames: 5" in callback_body
     assert b"0 0 0\n1 1 1\n1 1 1\n1 1 1\n2 2 2" in callback_body
+
+
+def test_merge_normalizes_all_files_to_lowest_frame_rate() -> None:
+    payload = {
+        "actionId": "action-merge-fps",
+        "fileUrls": [MERGE_SOURCE_URL_1, MERGE_SOURCE_URL_2],
+        "intervalsSeconds": [0],
+        "bvhMotionDuration": [0.1, 0.05],
+        "callbackUrl": CALLBACK_URL,
+    }
+    with respx.mock:
+        respx.get(MERGE_SOURCE_URL_1).mock(
+            return_value=Response(200, content=MERGE_BVH_HIGH_FPS)
+        )
+        respx.get(MERGE_SOURCE_URL_2).mock(
+            return_value=Response(200, content=MERGE_BVH_2)
+        )
+        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+
+        with TestClient(create_app()) as client:
+            response = client.post("/api/v1/bvh/merge", json=payload)
+
+    assert response.status_code == 200
+    callback_body = callback.calls.last.request.content
+    assert b"Frames: 3" in callback_body
+    assert b"Frame Time: 0.05" in callback_body
+    assert b"0 0 0\n2 2 2\n2 2 2" in callback_body
 
 
 def test_merge_rejects_wrong_interval_count() -> None:

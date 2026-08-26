@@ -136,7 +136,8 @@ async def train(
     response_model=ProcessBvhResponse,
     summary="提交多个 BVH 合并任务",
     description=(
-        "按 fileUrls 的顺序异步合并多个 BVH。intervalsSeconds 中的每个值"
+        "按 fileUrls 的顺序异步合并多个 BVH。下载完成后先检测各文件帧率，"
+        "并将所有文件降采样到最低帧率；intervalsSeconds 中的每个值"
         "表示对应两个文件之间的间隔秒数；间隔帧保持前一个文件的最后姿势。"
         "完成后通过 callbackUrl 上传合并文件。"
     ),

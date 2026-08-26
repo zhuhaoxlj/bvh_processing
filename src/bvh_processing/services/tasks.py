@@ -14,6 +14,7 @@ from bvh_processing.services.callback import (
 from bvh_processing.services.download import DownloadedBvh, download_bvh
 from bvh_processing.services.processing import (
     merge_bvh_files,
+    normalize_bvh_frame_rates,
     process_bvh,
     processed_filename,
 )
@@ -136,14 +137,19 @@ async def run_merge_task(
     payload: MergeBvhRequest,
 ) -> None:
     resources: list[DownloadedBvh] = []
+    normalized_resources: list[DownloadedBvh] = []
     result: DownloadedBvh | None = None
     try:
         for file_url in payload.file_urls:
             resources.append(await download_bvh(client, str(file_url), settings))
-        # BVH 解析和大量帧写入属于阻塞工作，放在线程中避免阻塞事件循环。
+        # 降采样与合并是两个独立步骤，并在线程中执行以避免阻塞事件循环。
+        normalized_resources = await asyncio.to_thread(
+            normalize_bvh_frame_rates,
+            resources,
+        )
         result = await asyncio.to_thread(
             merge_bvh_files,
-            resources,
+            normalized_resources,
             payload.intervals_seconds,
         )
         await send_callback(
@@ -166,5 +172,7 @@ async def run_merge_task(
     finally:
         if result is not None:
             result.content.close()
+        for resource in normalized_resources:
+            resource.content.close()
         for resource in resources:
             resource.content.close()

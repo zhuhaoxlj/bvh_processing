@@ -106,6 +106,82 @@ def _parse_bvh(downloaded: DownloadedBvh) -> _ParsedBvh:
     )
 
 
+def _resample_frames(parsed: _ParsedBvh, target_frame_time: float) -> list[str]:
+    """按目标采样间隔选取最近帧，只降低帧率，不生成插值姿势。"""
+    if math.isclose(
+        parsed.frame_time, target_frame_time, rel_tol=1e-7, abs_tol=1e-9
+    ):
+        return parsed.frames
+
+    output_frame_count = max(
+        1,
+        math.floor(
+            len(parsed.frames) * parsed.frame_time / target_frame_time + 0.5
+        ),
+    )
+    return [
+        parsed.frames[
+            min(
+                math.floor(
+                    index * target_frame_time / parsed.frame_time + 0.5
+                ),
+                len(parsed.frames) - 1,
+            )
+        ]
+        for index in range(output_frame_count)
+    ]
+
+
+def _build_bvh(
+    parsed: _ParsedBvh,
+    frames: list[str],
+    frame_time_text: str,
+    source_filename: str,
+) -> DownloadedBvh:
+    output_text = (
+        f"{parsed.hierarchy}\nMOTION\n"
+        f"Frames: {len(frames)}\n"
+        f"Frame Time: {frame_time_text}\n" + "\n".join(frames) + "\n"
+    )
+    output_bytes = output_text.encode("utf-8")
+    output = SpooledTemporaryFile(max_size=_SPOOL_MEMORY_LIMIT, mode="w+b")  # noqa: SIM115
+    output.write(output_bytes)
+    output.seek(0)
+    return DownloadedBvh(
+        content=output,
+        source_filename=source_filename,
+        size=len(output_bytes),
+    )
+
+
+def normalize_bvh_frame_rates(
+    downloaded_files: list[DownloadedBvh],
+) -> list[DownloadedBvh]:
+    """将多个 BVH 分别降采样到其中的最低帧率。"""
+    if not downloaded_files:
+        raise ValueError("BVH 文件不能为空")
+
+    parsed_files = [_parse_bvh(downloaded) for downloaded in downloaded_files]
+    # 帧率最低的文件拥有最大的 Frame Time；其他文件只做降采样。
+    target = max(parsed_files, key=lambda parsed: parsed.frame_time)
+    normalized_files: list[DownloadedBvh] = []
+    try:
+        for downloaded, parsed in zip(downloaded_files, parsed_files, strict=True):
+            normalized_files.append(
+                _build_bvh(
+                    parsed,
+                    _resample_frames(parsed, target.frame_time),
+                    target.frame_time_text,
+                    downloaded.source_filename,
+                )
+            )
+    except Exception:
+        for normalized in normalized_files:
+            normalized.content.close()
+        raise
+    return normalized_files
+
+
 def merge_bvh_files(
     downloaded_files: list[DownloadedBvh],
     intervals_seconds: list[float],
@@ -135,17 +211,16 @@ def merge_bvh_files(
             )
             merged_frames.extend([parsed.frames[-1]] * interval_frame_count)
 
-    output_text = (
-        f"{first.hierarchy}\nMOTION\n"
-        f"Frames: {len(merged_frames)}\n"
-        f"Frame Time: {first.frame_time_text}\n" + "\n".join(merged_frames) + "\n"
+    merged = _ParsedBvh(
+        hierarchy=first.hierarchy,
+        frame_time=first.frame_time,
+        frame_time_text=first.frame_time_text,
+        frames=merged_frames,
+        channel_count=first.channel_count,
     )
-    output_bytes = output_text.encode("utf-8")
-    output = SpooledTemporaryFile(max_size=_SPOOL_MEMORY_LIMIT, mode="w+b")  # noqa: SIM115
-    output.write(output_bytes)
-    output.seek(0)
-    return DownloadedBvh(
-        content=output,
-        source_filename=merged_filename(downloaded_files[0].source_filename),
-        size=len(output_bytes),
+    return _build_bvh(
+        merged,
+        merged_frames,
+        first.frame_time_text,
+        merged_filename(downloaded_files[0].source_filename),
     )
