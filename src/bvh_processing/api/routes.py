@@ -18,14 +18,69 @@ from bvh_processing.services.callback import validate_callback_url
 from bvh_processing.services.tasks import run_merge_task, run_processing_task
 from bvh_processing.training.task import run_train_task
 
+
+# ============================================================================
+# 接口总流程（所有提交接口都采用“接收即返回、后台异步执行”的模式）
+#
+# 客户端
+#   │ POST 请求 + JSON 入参
+#   ▼
+# FastAPI 路由函数（本文件）
+#   ├─ Pydantic 校验请求体（schemas.py）
+#   ├─ validate_callback_url() 校验回调地址
+#   ├─ uuid4() 生成 taskId
+#   └─ background_tasks.add_task() 注册后台任务
+#          │
+#          ├─ /process  → run_processing_task()
+#          ├─ /merge    → run_merge_task()
+#          ├─ /retarget → run_retarget_task()
+#          └─ /train    → run_train_task()
+#                         │
+#                         ├─ 下载源文件
+#                         ├─ 执行对应算法/处理步骤
+#                         ├─ 通过 callbackUrl 回传进度或结果
+#                         └─ 释放临时文件和资源
+#
+# 路由函数不会等待上述耗时任务完成，而是立即返回：
+#   {"success": true, "taskId": "...", "message": "任务已接收"}
+# 因此 success=true 只表示任务已被服务接收，不代表最终处理成功。
+# ============================================================================
+
+
 router = APIRouter()
 
 
+# ----------------------------------------------------------------------------
+# GET /health
+#
+# 入参：无请求体、无查询参数。
+# 返回：HealthResponse，即 {"status": "ok"}，用于确认服务进程可用。
+# ----------------------------------------------------------------------------
 @router.get("/health", response_model=HealthResponse, tags=["system"])
 async def health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
+# ----------------------------------------------------------------------------
+# POST /api/v1/bvh/process
+#
+# 入参：ProcessBvhRequest（JSON）
+# - actionId：业务动作记录 ID。
+# - originalFileUrl：MinIO 中原始 BVH 的可下载地址。
+# - handleOptions：处理选项列表；1 去噪、2 平滑、3 脚步锁定、4 循环优化。
+# - callbackUrl：处理进度和最终结果的回调地址。
+#
+# 后台流程：
+#   download_bvh() → process_bvh() → send_progress_callback()
+#   → send_callback(file=处理结果)
+#   当前 process_bvh() 是算法接入点，联调阶段原样返回 BVH 内容；
+#   进度回调按 handleOptions 逐项发送，最终结果只发送一次。
+#
+# 返回：ProcessBvhResponse（立即返回）
+# - success：是否成功接收任务。
+# - taskId：后台任务 ID，可用于业务侧关联任务。
+# - message：接收结果说明。
+# ----------------------------------------------------------------------------
 @router.post(
     "/api/v1/bvh/process",
     response_model=ProcessBvhResponse,
@@ -61,6 +116,21 @@ async def process(
     )
 
 
+# ----------------------------------------------------------------------------
+# POST /api/v1/bvh/retarget
+#
+# 入参：RetargetBvhRequest（JSON）
+# - originalFileUrl：LAFAN1/Nokov BVH 的 MinIO 下载地址。
+# - robotType：机器人类型，目前 1 表示 Unitree G1。
+# - callbackUrl：重定向结果回调地址。
+#
+# 后台流程：
+#   run_retarget_task() → download_bvh() → 分类/解析 BVH
+#   → Robot Retargeter 重定向 → 导出 Whole Body Tracking NPZ 和元数据 JSON
+#   → send_callback(attachments=[NPZ, JSON])
+#
+# 返回：ProcessBvhResponse，字段含义与 /process 相同；最终文件通过回调上传。
+# ----------------------------------------------------------------------------
 @router.post(
     "/api/v1/bvh/retarget",
     response_model=ProcessBvhResponse,
@@ -96,6 +166,25 @@ async def retarget(
     )
 
 
+# ----------------------------------------------------------------------------
+# POST /api/v1/bvh/train
+#
+# 入参：TrainBvhRequest（JSON）
+# - actionId：可选的训练记录 ID。
+# - robotType：机器人类型。
+# - algorithmType：训练算法，1 BeyondMimic、2 PHC、3 OmniH2O。
+# - npzFileUrl：重定向后 NPZ 文件的 MinIO 下载地址。
+# - domainRandomization：域随机强度，1 低、2 中、3 高。
+# - returnType：返回类型，1 MP4 仿真视频、2 ONNX 模型。
+# - callbackUrl：训练结果回调地址。
+#
+# 后台流程：
+#   run_train_task() → download_npz() → 按 robotType、algorithmType
+#   和 domainRandomization 配置训练 → 根据 returnType 生成 MP4 或 ONNX
+#   → send_callback(file=训练产物)
+#
+# 返回：ProcessBvhResponse，表示任务是否已接收；训练产物通过回调上传。
+# ----------------------------------------------------------------------------
 @router.post(
     "/api/v1/bvh/train",
     response_model=ProcessBvhResponse,
@@ -131,6 +220,28 @@ async def train(
     )
 
 
+# ----------------------------------------------------------------------------
+# POST /api/v1/bvh/merge
+#
+# 入参：MergeBvhRequest（JSON）
+# - actionId：业务动作记录 ID。
+# - fileUrls：按合并顺序排列的 BVH 下载地址，至少两个。
+# - intervalsSeconds：相邻 BVH 之间的间隔秒数，数量为文件数减一。
+# - bvhMotionDuration：每个 BVH 的目标动作时长，按 fileUrls 下标一一对应。
+# - callbackUrl：合并结果回调地址。
+#
+# 后台流程：
+#   run_merge_task()
+#     → download_bvh()：逐个下载并校验文件
+#     → normalize_bvh_frame_rates()：统一到最低帧率
+#     → adjust_bvh_motion_durations()：按 bvhMotionDuration 重采样，
+#       目标时长更短则加速，目标时长更长则放慢
+#     → merge_bvh_files()：校验骨架/通道/帧率，按顺序拼接动作帧，
+#       并在相邻动作之间重复前一段最后一帧作为间隔
+#     → send_callback(file=*_merged.bvh)：上传最终合并文件
+#
+# 返回：ProcessBvhResponse，表示合并任务是否已接收；最终 BVH 通过回调上传。
+# ----------------------------------------------------------------------------
 @router.post(
     "/api/v1/bvh/merge",
     response_model=ProcessBvhResponse,
