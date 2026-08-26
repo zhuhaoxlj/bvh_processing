@@ -1,0 +1,28 @@
+# Normalize text files to LF across Windows, Linux, and macOS.
+* text=auto eol=lf
+
+# Windows-native command scripts require CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Unix shell scripts require LF.
+*.sh text eol=lf
+
+# Common binary formats must never undergo line-ending conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.7z binary
+*.jar binary
+*.war binary
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.mp3 binary
+*.mp4 binary
