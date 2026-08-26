@@ -164,15 +164,16 @@ curl -X POST \
 - `returnType`：`1` 回传 MP4 仿真视频，`2` 回传 ONNX 模型。
 - `npzFileUrl`：重定向 NPZ 文件的 MinIO 下载地址。
 
-服务接收任务后返回异步任务 ID，下载 NPZ 并调用 `BVH_TRAIN_COMMAND` 指定的
-训练程序。训练程序会收到以下参数：
+服务接收任务后返回异步任务 ID 并下载 NPZ。`returnType=1` 时调用
+`BVH_TRAIN_COMMAND` 指定的训练程序，训练程序会收到以下参数：
 
 ```text
 --input <NPZ路径> --output <输出路径> --robot-type <编号>
 --algorithm-type <编号> --domain-randomization <1|2|3> --return-type <1|2>
 ```
 
-训练程序必须在 `--output` 指定的位置生成文件。成功后服务通过同一个
+训练程序必须在 `--output` 指定的位置生成 MP4。`returnType=2` 时不调用训练
+程序，直接回传内置的 `assets/policy_demo/1a2_34000.onnx`。服务通过同一个
 `callbackUrl` 以 `multipart/form-data` 上传 `file`；类型 `1` 的媒体类型为
 `video/mp4`，类型 `2` 为 `application/octet-stream`。失败回调不包含文件。
 

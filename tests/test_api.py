@@ -1,6 +1,7 @@
 import json
 import logging
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID
 
@@ -277,6 +278,40 @@ def test_train_accepts_task_and_callbacks_selected_artifact(
     assert f'filename="{filename}"'.encode() in callback_body
     assert content_type.encode() in callback_body
     assert content in callback_body
+
+
+def test_train_return_type_two_callbacks_demo_policy() -> None:
+    payload = {
+        "actionId": "training-policy-demo",
+        "robotType": 1,
+        "algorithmType": 1,
+        "npzFileUrl": TRAIN_NPZ_URL,
+        "domainRandomization": 2,
+        "returnType": 2,
+        "callbackUrl": CALLBACK_URL,
+    }
+    policy_path = (
+        Path(__file__).parents[1]
+        / "src"
+        / "bvh_processing"
+        / "assets"
+        / "policy_demo"
+        / "1a2_34000.onnx"
+    )
+
+    with respx.mock:
+        respx.get(TRAIN_NPZ_URL).mock(return_value=Response(200, content=TRAIN_NPZ))
+        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+
+        with TestClient(create_app()) as client:
+            response = client.post("/api/v1/bvh/train", json=payload)
+
+    assert response.status_code == 200
+    assert len(callback.calls) == 1
+    callback_body = callback.calls.last.request.content
+    assert b'filename="1a2_34000.onnx"' in callback_body
+    assert b"application/octet-stream" in callback_body
+    assert policy_path.read_bytes() in callback_body
 
 
 @pytest.mark.parametrize(
