@@ -19,6 +19,7 @@ class CallbackFile:
     content: BinaryIO
     filename: str
     content_type: str = "application/octet-stream"
+    field_name: str = "file"
 
 
 def validate_callback_url(
@@ -97,7 +98,7 @@ async def send_callback(
             callback_file.content.seek(0)
             parts.append(
                 (
-                    "file",
+                    callback_file.field_name,
                     (
                         callback_file.filename,
                         callback_file.content,

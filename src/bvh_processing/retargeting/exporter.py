@@ -1,4 +1,4 @@
-"""将 Robot Retargeter 输出导出为 Whole Body Tracking NPZ 和元数据 JSON。"""
+"""将 Robot Retargeter 输出导出为 Whole Body Tracking NPZ 和 GMR 预览 JSON。"""
 
 from __future__ import annotations
 
@@ -16,6 +16,9 @@ from bvh_processing.retargeting.robot_retargeter import RobotRetargetResult
 
 _OUTPUT_FPS = 50.0
 _SPOOL_MEMORY_LIMIT = 8 * 1024 * 1024
+_PREVIEW_MESH_GEOMS_PATH = (
+    Path(__file__).parent / "assets" / "g1_preview_mesh_geoms.json"
+)
 
 G1_MUJOCO_JOINT_NAMES = (
     "left_hip_pitch_joint",
@@ -117,12 +120,12 @@ G1_ISAACLAB_BODY_NAMES = (
 class RetargetArtifacts:
     npz: BinaryIO
     npz_filename: str
-    metadata: BinaryIO
-    metadata_filename: str
+    preview: BinaryIO
+    preview_filename: str
 
     def close(self) -> None:
         self.npz.close()
-        self.metadata.close()
+        self.preview.close()
 
 
 def _spooled(data: bytes) -> BinaryIO:
@@ -134,6 +137,62 @@ def _spooled(data: bytes) -> BinaryIO:
     content.write(data)
     content.seek(0)
     return content
+
+
+def _preview_payload(
+    model: mj.MjModel,
+    root_position: np.ndarray,
+    root_quaternion_xyzw: np.ndarray,
+    joint_position_mujoco: np.ndarray,
+    source_filename: str,
+) -> dict[str, object]:
+    """按 GMR retarget_vue 的逐帧 MuJoCo FK 格式构建预览数据。"""
+    body_ids = list(range(1, model.nbody))
+    body_names = [
+        mj.mj_id2name(model, mj.mjtObj.mjOBJ_BODY, body_id)
+        or f"body_{body_id}"
+        for body_id in body_ids
+    ]
+    body_index = {body_id: index for index, body_id in enumerate(body_ids)}
+    links = [
+        [body_index[parent_id], body_index[body_id]]
+        for body_id in body_ids
+        if (parent_id := int(model.body_parentid[body_id])) in body_index
+    ]
+
+    data = mj.MjData(model)
+    body_frames: list[list[list[float]]] = []
+    body_quats: list[list[list[float]]] = []
+    frames: list[list[list[float]]] = []
+    for frame_index in range(root_position.shape[0]):
+        data.qpos[:] = 0.0
+        data.qpos[:3] = root_position[frame_index]
+        data.qpos[3:7] = root_quaternion_xyzw[frame_index, [3, 0, 1, 2]]
+        data.qpos[7:] = joint_position_mujoco[frame_index]
+        mj.mj_forward(model, data)
+        positions = data.xpos[body_ids].astype(float)
+        quaternions_xyzw = data.xquat[body_ids][:, [1, 2, 3, 0]].astype(float)
+        body_frames.append(positions.round(6).tolist())
+        body_quats.append(quaternions_xyzw.round(6).tolist())
+        frames.append((positions * 100.0).round(4).tolist())
+
+    mesh_geoms = json.loads(_PREVIEW_MESH_GEOMS_PATH.read_text())
+    stem = Path(source_filename).stem
+    frame_count = int(root_position.shape[0])
+    return {
+        "name": f"{stem}_g1_retarget.pkl",
+        "robot": "unitree_g1",
+        "fps": _OUTPUT_FPS,
+        "frame_time": 1.0 / _OUTPUT_FPS,
+        "frame_count": frame_count,
+        "body_names": body_names,
+        "mesh_geoms": mesh_geoms,
+        "body_frames": body_frames,
+        "body_quats": body_quats,
+        "links": links,
+        "frames": frames,
+        "comparison": None,
+    }
 
 
 def _continuous_quaternions(quaternions: np.ndarray) -> np.ndarray:
@@ -257,40 +316,19 @@ def export_tracking_artifacts(
     npz_content.seek(0)
 
     stem = Path(source_filename).stem
-    metadata_filename = f"{stem}_g1_tracking.json"
-    metadata = {
-        "schema": "whole_body_tracking_motion",
-        "schema_version": 1,
-        "container": "numpy_npz",
-        "robot": "unitree_g1_29dof",
-        "fps": _OUTPUT_FPS,
-        "frame_count": int(root_position.shape[0]),
-        "joint_count": len(G1_ISAACLAB_JOINT_NAMES),
-        "body_count": len(G1_ISAACLAB_BODY_NAMES),
-        "source_bvh": source_filename,
-        "source_bvh_format": bvh_format,
-        "world_coordinate_system": "right_handed_z_up",
-        "body_quaternion_order": "wxyz",
-        "joint_names": list(G1_ISAACLAB_JOINT_NAMES),
-        "body_names": list(G1_ISAACLAB_BODY_NAMES),
-        "required_npz_keys": [
-            "fps",
-            "joint_pos",
-            "joint_vel",
-            "body_pos_w",
-            "body_quat_w",
-            "body_lin_vel_w",
-            "body_ang_vel_w",
-        ],
-        "generator": "GMR Robot Retargeter",
-        "retarget_diagnostics": result.diagnostics,
-    }
-    metadata_content = _spooled(
-        (json.dumps(metadata, ensure_ascii=False, indent=2) + "\n").encode()
+    preview = _preview_payload(
+        result.model,
+        root_position,
+        root_quaternion_xyzw,
+        joint_position_mujoco,
+        source_filename,
+    )
+    preview_content = _spooled(
+        (json.dumps(preview, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
     )
     return RetargetArtifacts(
         npz=npz_content,
         npz_filename=f"{stem}_g1_tracking.npz",
-        metadata=metadata_content,
-        metadata_filename=metadata_filename,
+        preview=preview_content,
+        preview_filename=f"{stem}_g1_preview.json",
     )

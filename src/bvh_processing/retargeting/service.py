@@ -17,7 +17,7 @@ from bvh_processing.services.download import DownloadedBvh
 
 
 def retarget_downloaded_bvh(downloaded: DownloadedBvh) -> RetargetArtifacts:
-    """执行 Robot Retargeter，并生成训练 NPZ 与元数据 JSON。"""
+    """执行 Robot Retargeter，并生成训练 NPZ 与 GMR 预览 JSON。"""
     bvh_format = classify_downloaded_bvh(downloaded.content)
     try:
         with TemporaryDirectory(prefix="bvh-retarget-") as directory:

@@ -18,7 +18,7 @@ SOURCE_URL = "https://minio.example.com/motions/walk.bvh"
 CALLBACK_URL = "https://backend.example.com/callbacks/bvh"
 PROGRESS_CALLBACK_URL = "https://backend.example.com/progress-callbacks/bvh"
 RETARGET_NPZ = b"tracking-npz-content"
-RETARGET_JSON = b'{"schema":"whole_body_tracking_motion"}'
+RETARGET_JSON = b'{"robot":"unitree_g1","frames":[]}'
 TRAIN_NPZ_URL = "https://minio.example.com/motions/walk_g1_tracking.npz"
 TRAIN_NPZ = b"retargeted-npz-content"
 TRAIN_MP4 = b"generated-mp4-content"
@@ -186,8 +186,8 @@ def test_retarget_accepts_task_and_callbacks_with_npz_and_json(
     artifacts = RetargetArtifacts(
         npz=BytesIO(RETARGET_NPZ),
         npz_filename="walk_g1_tracking.npz",
-        metadata=BytesIO(RETARGET_JSON),
-        metadata_filename="walk_g1_tracking.json",
+        preview=BytesIO(RETARGET_JSON),
+        preview_filename="walk_g1_preview.json",
     )
 
     with (
@@ -211,8 +211,10 @@ def test_retarget_accepts_task_and_callbacks_with_npz_and_json(
 
     callback_body = callback.calls.last.request.content
     assert b'name="actionId"' not in callback_body
+    assert b'name="npzFile"' in callback_body
+    assert b'name="jsonFile"' in callback_body
     assert b'filename="walk_g1_tracking.npz"' in callback_body
-    assert b'filename="walk_g1_tracking.json"' in callback_body
+    assert b'filename="walk_g1_preview.json"' in callback_body
     assert b"application/json" in callback_body
     assert RETARGET_NPZ in callback_body
     assert RETARGET_JSON in callback_body
