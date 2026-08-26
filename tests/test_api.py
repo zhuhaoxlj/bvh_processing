@@ -26,6 +26,8 @@ TRAIN_ONNX = b"generated-onnx-content"
 BVH_CONTENT = b"""HIERARCHY
 ROOT Hips
 {
+  OFFSET 0 0 0
+  CHANNELS 1 Xposition
   JOINT LeftToe
   {
   }
@@ -35,6 +37,8 @@ ROOT Hips
 }
 MOTION
 Frames: 1
+Frame Time: 0.0333333
+0
 """
 UNSUPPORTED_BVH_CONTENT = b"HIERARCHY\nROOT Hips\nMOTION\nFrames: 1\n"
 MERGE_SOURCE_URL_1 = "https://minio.example.com/motions/first.bvh"

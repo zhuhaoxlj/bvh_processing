@@ -128,6 +128,8 @@ async def run_processing_task(
         # 回调失败不能逃逸到后台任务运行器。
         log_callback_failure(task_id, callback_error)
     finally:
+        if result is not resource:
+            result.content.close()
         resource.content.close()
 
 

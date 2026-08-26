@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+import statistics
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import SpooledTemporaryFile
@@ -15,6 +16,7 @@ _FRAME_TIME_PATTERN = re.compile(
     r"^Frame\s+Time\s*:\s*([0-9]+(?:\.[0-9]*)?|\.[0-9]+)\s*$",
     re.IGNORECASE,
 )
+_CHANNELS_PATTERN = re.compile(r"^\s*CHANNELS\s+(\d+)\s+(.+)$", re.IGNORECASE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,9 +42,32 @@ def process_bvh(
     downloaded: DownloadedBvh,
     handle_options: list[int],
 ) -> DownloadedBvh:
-    """平滑算法接入点；联调阶段保持 BVH 内容不变。"""
-    del handle_options
-    return downloaded
+    """按照 handleOptions 的顺序处理 BVH 动作数据。"""
+    processors = {
+        1: denoise_bvh,
+        2: smooth_bvh,
+        3: lock_bvh_feet,
+        4: optimize_bvh_loop,
+    }
+    current = downloaded
+    try:
+        for option in handle_options:
+            processor = processors.get(option)
+            if processor is None:
+                raise BvhServiceError(
+                    status_code=422,
+                    code="invalid_handle_option",
+                    message=f"不支持的 BVH 处理选项：{option}",
+                )
+            processed = processor(current)
+            if processed is not current and current is not downloaded:
+                current.content.close()
+            current = processed
+    except Exception:
+        if current is not downloaded:
+            current.content.close()
+        raise
+    return current
 
 
 def _invalid_bvh(message: str) -> BvhServiceError:
@@ -152,6 +177,145 @@ def _build_bvh(
         source_filename=source_filename,
         size=len(output_bytes),
     )
+
+
+def _rotation_channel_indexes(parsed: _ParsedBvh) -> set[int]:
+    channel_names: list[str] = []
+    for line in parsed.hierarchy.splitlines():
+        match = _CHANNELS_PATTERN.match(line)
+        if match is None:
+            continue
+        declared_count = int(match.group(1))
+        names = match.group(2).split()
+        if len(names) != declared_count:
+            return set()
+        channel_names.extend(names)
+    if len(channel_names) != parsed.channel_count:
+        return set()
+    return {
+        index
+        for index, name in enumerate(channel_names)
+        if name.lower().endswith("rotation")
+    }
+
+
+def _unwrap_rotations(
+    values: list[list[float]],
+    rotation_channels: set[int],
+) -> None:
+    """展开跨越正负 180 度边界的旋转，避免滤波产生错误的中间角度。"""
+    for channel in rotation_channels:
+        for frame_index in range(1, len(values)):
+            previous = values[frame_index - 1][channel]
+            current = values[frame_index][channel]
+            delta = (current - previous + 180.0) % 360.0 - 180.0
+            values[frame_index][channel] = previous + delta
+
+
+def _motion_values(parsed: _ParsedBvh, source_filename: str) -> list[list[float]]:
+    values: list[list[float]] = []
+    try:
+        for frame in parsed.frames:
+            row = [float(value) for value in frame.split()]
+            if any(not math.isfinite(value) for value in row):
+                raise ValueError
+            values.append(row)
+    except ValueError as error:
+        raise _invalid_bvh(
+            f"{source_filename} 的 MOTION 帧包含无效数值"
+        ) from error
+    return values
+
+
+def _format_motion_value(value: float) -> str:
+    if math.isclose(value, 0.0, abs_tol=1e-12):
+        return "0"
+    return f"{value:.10g}"
+
+
+def _build_processed_bvh(
+    downloaded: DownloadedBvh,
+    parsed: _ParsedBvh,
+    values: list[list[float]],
+) -> DownloadedBvh:
+    frames = [
+        " ".join(_format_motion_value(value) for value in frame)
+        for frame in values
+    ]
+    return _build_bvh(
+        parsed,
+        frames,
+        parsed.frame_time_text,
+        downloaded.source_filename,
+    )
+
+
+def denoise_bvh(
+    downloaded: DownloadedBvh,
+    window_size: int = 3,
+) -> DownloadedBvh:
+    """使用时间轴中值滤波移除各运动通道的孤立尖峰。"""
+    if window_size < 1 or window_size % 2 == 0:
+        raise ValueError("去噪窗口必须是大于等于 1 的奇数")
+
+    parsed = _parse_bvh(downloaded)
+    values = _motion_values(parsed, downloaded.source_filename)
+    _unwrap_rotations(values, _rotation_channel_indexes(parsed))
+    radius = window_size // 2
+    filtered: list[list[float]] = []
+    for frame_index, frame in enumerate(values):
+        neighbors = [
+            min(max(index, 0), len(values) - 1)
+            for index in range(frame_index - radius, frame_index + radius + 1)
+        ]
+        filtered.append(
+            [
+                statistics.median(
+                    values[index][channel] for index in neighbors
+                )
+                for channel in range(len(frame))
+            ]
+        )
+    return _build_processed_bvh(downloaded, parsed, filtered)
+
+
+def smooth_bvh(
+    downloaded: DownloadedBvh,
+    window_size: int = 5,
+) -> DownloadedBvh:
+    """使用居中移动平均滤波平滑各运动通道的逐帧抖动。"""
+    if window_size < 1 or window_size % 2 == 0:
+        raise ValueError("平滑窗口必须是大于等于 1 的奇数")
+
+    parsed = _parse_bvh(downloaded)
+    values = _motion_values(parsed, downloaded.source_filename)
+    _unwrap_rotations(values, _rotation_channel_indexes(parsed))
+    radius = window_size // 2
+    smoothed: list[list[float]] = []
+    for frame_index, frame in enumerate(values):
+        neighbors = [
+            min(max(index, 0), len(values) - 1)
+            for index in range(frame_index - radius, frame_index + radius + 1)
+        ]
+        smoothed.append(
+            [
+                statistics.fmean(
+                    values[index][channel] for index in neighbors
+                )
+                for channel in range(len(frame))
+            ]
+        )
+    return _build_processed_bvh(downloaded, parsed, smoothed)
+
+
+def lock_bvh_feet(downloaded: DownloadedBvh) -> DownloadedBvh:
+    """脚步锁定算法占位；当前保持 BVH 数据不变。"""
+    return downloaded
+
+
+def optimize_bvh_loop(downloaded: DownloadedBvh) -> DownloadedBvh:
+    """循环优化算法占位；当前保持 BVH 数据不变。"""
+    return downloaded
 
 
 def normalize_bvh_frame_rates(
