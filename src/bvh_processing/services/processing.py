@@ -9,6 +9,11 @@ from tempfile import SpooledTemporaryFile
 
 from bvh_processing.errors import BvhServiceError
 from bvh_processing.services.download import DownloadedBvh
+from bvh_processing.services.transition import (
+    create_transitions,
+    motion_from_parts,
+    motion_hierarchy,
+)
 
 _SPOOL_MEMORY_LIMIT = 8 * 1024 * 1024
 _FRAMES_PATTERN = re.compile(r"^Frames\s*:\s*(\d+)\s*$", re.IGNORECASE)
@@ -133,23 +138,17 @@ def _parse_bvh(downloaded: DownloadedBvh) -> _ParsedBvh:
 
 def _resample_frames(parsed: _ParsedBvh, target_frame_time: float) -> list[str]:
     """按目标采样间隔选取最近帧，只降低帧率，不生成插值姿势。"""
-    if math.isclose(
-        parsed.frame_time, target_frame_time, rel_tol=1e-7, abs_tol=1e-9
-    ):
+    if math.isclose(parsed.frame_time, target_frame_time, rel_tol=1e-7, abs_tol=1e-9):
         return parsed.frames
 
     output_frame_count = max(
         1,
-        math.floor(
-            len(parsed.frames) * parsed.frame_time / target_frame_time + 0.5
-        ),
+        math.floor(len(parsed.frames) * parsed.frame_time / target_frame_time + 0.5),
     )
     return [
         parsed.frames[
             min(
-                math.floor(
-                    index * target_frame_time / parsed.frame_time + 0.5
-                ),
+                math.floor(index * target_frame_time / parsed.frame_time + 0.5),
                 len(parsed.frames) - 1,
             )
         ]
@@ -221,9 +220,7 @@ def _motion_values(parsed: _ParsedBvh, source_filename: str) -> list[list[float]
                 raise ValueError
             values.append(row)
     except ValueError as error:
-        raise _invalid_bvh(
-            f"{source_filename} 的 MOTION 帧包含无效数值"
-        ) from error
+        raise _invalid_bvh(f"{source_filename} 的 MOTION 帧包含无效数值") from error
     return values
 
 
@@ -239,8 +236,7 @@ def _build_processed_bvh(
     values: list[list[float]],
 ) -> DownloadedBvh:
     frames = [
-        " ".join(_format_motion_value(value) for value in frame)
-        for frame in values
+        " ".join(_format_motion_value(value) for value in frame) for frame in values
     ]
     return _build_bvh(
         parsed,
@@ -270,9 +266,7 @@ def denoise_bvh(
         ]
         filtered.append(
             [
-                statistics.median(
-                    values[index][channel] for index in neighbors
-                )
+                statistics.median(values[index][channel] for index in neighbors)
                 for channel in range(len(frame))
             ]
         )
@@ -299,9 +293,7 @@ def smooth_bvh(
         ]
         smoothed.append(
             [
-                statistics.fmean(
-                    values[index][channel] for index in neighbors
-                )
+                statistics.fmean(values[index][channel] for index in neighbors)
                 for channel in range(len(frame))
             ]
         )
@@ -377,12 +369,7 @@ def adjust_bvh_motion_durations(
                 output_frames = [
                     parsed.frames[
                         min(
-                            math.floor(
-                                index
-                                * source_duration
-                                / target_duration
-                                + 0.5
-                            ),
+                            math.floor(index * source_duration / target_duration + 0.5),
                             len(parsed.frames) - 1,
                         )
                     ]
@@ -408,37 +395,41 @@ def merge_bvh_files(
     downloaded_files: list[DownloadedBvh],
     intervals_seconds: list[float],
 ) -> DownloadedBvh:
-    """合并骨架和采样率一致的 BVH，间隔区间保持前一段的最后一帧。"""
+    """使用动作对齐、旋转插值和脚部锁定过渡来合并多个 BVH。"""
     if len(downloaded_files) < 2 or len(intervals_seconds) != len(downloaded_files) - 1:
-        raise ValueError("BVH 文件与间隔数量不匹配")
+        raise ValueError("BVH 文件与过渡时间数量不匹配")
 
     parsed_files = [_parse_bvh(downloaded) for downloaded in downloaded_files]
     first = parsed_files[0]
-    merged_frames: list[str] = []
-
-    for index, parsed in enumerate(parsed_files):
-        if parsed.hierarchy != first.hierarchy:
-            raise _invalid_bvh("所有 BVH 文件必须使用完全相同的骨架层级")
-        if parsed.channel_count != first.channel_count:
-            raise _invalid_bvh("所有 BVH 文件的通道数量必须一致")
+    for parsed in parsed_files[1:]:
         if not math.isclose(
             parsed.frame_time, first.frame_time, rel_tol=1e-7, abs_tol=1e-9
         ):
             raise _invalid_bvh("所有 BVH 文件的 Frame Time 必须一致")
 
-        merged_frames.extend(parsed.frames)
-        if index < len(intervals_seconds):
-            interval_frame_count = math.floor(
-                intervals_seconds[index] / first.frame_time + 0.5
-            )
-            merged_frames.extend([parsed.frames[-1]] * interval_frame_count)
+    # intervalsSeconds 不再生成静止帧，而是转换成每个接缝的过渡帧数。
+    transition_frame_counts = [
+        math.floor(seconds / first.frame_time + 0.5) for seconds in intervals_seconds
+    ]
+    try:
+        motions = [
+            motion_from_parts(parsed.hierarchy, parsed.frames, parsed.frame_time)
+            for parsed in parsed_files
+        ]
+        merged_motion = create_transitions(motions, transition_frame_counts)
+    except ValueError as error:
+        raise _invalid_bvh(str(error)) from error
 
+    merged_frames = [
+        " ".join(_format_motion_value(float(value)) for value in frame)
+        for frame in merged_motion.frames
+    ]
     merged = _ParsedBvh(
-        hierarchy=first.hierarchy,
+        hierarchy=motion_hierarchy(merged_motion),
         frame_time=first.frame_time,
         frame_time_text=first.frame_time_text,
         frames=merged_frames,
-        channel_count=first.channel_count,
+        channel_count=merged_motion.frames.shape[1],
     )
     return _build_bvh(
         merged,

@@ -18,7 +18,6 @@ from bvh_processing.services.callback import validate_callback_url
 from bvh_processing.services.tasks import run_merge_task, run_processing_task
 from bvh_processing.training.task import run_train_task
 
-
 # ============================================================================
 # 接口总流程（所有提交接口都采用“接收即返回、后台异步执行”的模式）
 #
@@ -226,7 +225,7 @@ async def train(
 # 入参：MergeBvhRequest（JSON）
 # - actionId：业务动作记录 ID。
 # - fileUrls：按合并顺序排列的 BVH 下载地址，至少两个。
-# - intervalsSeconds：相邻 BVH 之间的间隔秒数，数量为文件数减一。
+# - intervalsSeconds：相邻 BVH 之间的平滑过渡秒数，数量为文件数减一。
 # - bvhMotionDuration：每个 BVH 的目标动作时长，按 fileUrls 下标一一对应。
 # - callbackUrl：合并结果回调地址。
 #
@@ -236,8 +235,10 @@ async def train(
 #     → normalize_bvh_frame_rates()：统一到最低帧率
 #     → adjust_bvh_motion_durations()：按 bvhMotionDuration 重采样，
 #       目标时长更短则加速，目标时长更长则放慢
-#     → merge_bvh_files()：校验骨架/通道/帧率，按顺序拼接动作帧，
-#       并在相邻动作之间重复前一段最后一帧作为间隔
+#     → merge_bvh_files()：校验骨架拓扑和帧率，将 intervalsSeconds
+#       换算为各接缝的过渡帧数；对后一个动作执行根节点位置/朝向对齐，
+#       使用 Hermite 曲线插值根节点位移、缓动旋转插值关节姿态，
+#       并锁定支撑脚以降低过渡阶段的脚部滑动
 #     → send_callback(file=*_merged.bvh)：上传最终合并文件
 #
 # 返回：ProcessBvhResponse，表示合并任务是否已接收；最终 BVH 通过回调上传。
@@ -248,8 +249,9 @@ async def train(
     summary="提交多个 BVH 合并任务",
     description=(
         "按 fileUrls 的顺序异步合并多个 BVH。下载完成后先检测各文件帧率，"
-        "并将所有文件降采样到最低帧率；intervalsSeconds 中的每个值"
-        "表示对应两个文件之间的间隔秒数；间隔帧保持前一个文件的最后姿势。"
+        "并将所有文件降采样到最低帧率，再按 bvhMotionDuration 调整动作速度；"
+        "intervalsSeconds 中的每个值表示对应两个动作之间的平滑过渡时长，"
+        "过渡阶段会执行根节点对齐、旋转插值和支撑脚锁定。"
         "完成后通过 callbackUrl 上传合并文件。"
     ),
     tags=["bvh"],

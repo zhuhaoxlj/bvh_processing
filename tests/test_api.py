@@ -47,56 +47,69 @@ MERGE_BVH_1 = b"""HIERARCHY
 ROOT Hips
 {
   OFFSET 0 0 0
-  CHANNELS 3 Xposition Yposition Zposition
+  CHANNELS 6 Xposition Yposition Zposition Yrotation Xrotation Zrotation
   JOINT LeftToe
   {
+    OFFSET -1 -1 0
+    CHANNELS 3 Yrotation Xrotation Zrotation
   }
   JOINT RightToe
   {
+    OFFSET 1 -1 0
+    CHANNELS 3 Yrotation Xrotation Zrotation
   }
 }
 MOTION
 Frames: 2
 Frame Time: 0.05
-0 0 0
-1 1 1
+0 0 0 0 0 0 0 0 0 0 0 0
+1 0 0 0 0 0 0 0 0 0 0 0
 """
 MERGE_BVH_2 = b"""HIERARCHY
 ROOT Hips
 {
   OFFSET 0 0 0
-  CHANNELS 3 Xposition Yposition Zposition
+  CHANNELS 6 Xposition Yposition Zposition Yrotation Xrotation Zrotation
   JOINT LeftToe
   {
+    OFFSET -1 -1 0
+    CHANNELS 3 Yrotation Xrotation Zrotation
   }
   JOINT RightToe
   {
+    OFFSET 1 -1 0
+    CHANNELS 3 Yrotation Xrotation Zrotation
   }
 }
 MOTION
-Frames: 1
+Frames: 2
 Frame Time: 0.05
-2 2 2
+2 0 0 0 0 0 0 0 0 0 0 0
+3 0 0 0 0 0 0 0 0 0 0 0
 """
 MERGE_BVH_HIGH_FPS = b"""HIERARCHY
 ROOT Hips
 {
   OFFSET 0 0 0
-  CHANNELS 3 Xposition Yposition Zposition
+  CHANNELS 6 Xposition Yposition Zposition Yrotation Xrotation Zrotation
   JOINT LeftToe
   {
+    OFFSET -1 -1 0
+    CHANNELS 3 Yrotation Xrotation Zrotation
   }
   JOINT RightToe
   {
+    OFFSET 1 -1 0
+    CHANNELS 3 Yrotation Xrotation Zrotation
   }
 }
 MOTION
 Frames: 4
 Frame Time: 0.025
-0 0 0
-1 1 1
-2 2 2
-3 3 3
+0 0 0 0 0 0 0 0 0 0 0 0
+1 0 0 0 0 0 0 0 0 0 0 0
+2 0 0 0 0 0 0 0 0 0 0 0
+3 0 0 0 0 0 0 0 0 0 0 0
 """
 
 
@@ -435,7 +448,7 @@ def test_merge_accepts_task_and_callbacks_with_merged_file() -> None:
         "actionId": "action-merge-42",
         "fileUrls": [MERGE_SOURCE_URL_1, MERGE_SOURCE_URL_2],
         "intervalsSeconds": [0.1],
-        "bvhMotionDuration": [3.21, 10.73],
+        "bvhMotionDuration": [0.05, 0.05],
         "callbackUrl": CALLBACK_URL,
     }
     with respx.mock:
@@ -460,8 +473,8 @@ def test_merge_accepts_task_and_callbacks_with_merged_file() -> None:
     assert b"actionId" in callback_body
     assert b"action-merge-42" in callback_body
     assert b'filename="first_merged.bvh"' in callback_body
-    assert b"Frames: 5" in callback_body
-    assert b"0 0 0\n1 1 1\n1 1 1\n1 1 1\n2 2 2" in callback_body
+    assert b"Frames: 6" in callback_body
+    assert b"Frame Time: 0.05" in callback_body
 
 
 def test_merge_normalizes_all_files_to_lowest_frame_rate() -> None:
@@ -486,9 +499,8 @@ def test_merge_normalizes_all_files_to_lowest_frame_rate() -> None:
 
     assert response.status_code == 200
     callback_body = callback.calls.last.request.content
-    assert b"Frames: 3" in callback_body
+    assert b"Frames: 5" in callback_body
     assert b"Frame Time: 0.05" in callback_body
-    assert b"0 0 0\n2 2 2\n2 2 2" in callback_body
 
 
 def test_merge_rejects_wrong_interval_count() -> None:
