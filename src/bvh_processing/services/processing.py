@@ -182,6 +182,64 @@ def normalize_bvh_frame_rates(
     return normalized_files
 
 
+def adjust_bvh_motion_durations(
+    downloaded_files: list[DownloadedBvh],
+    target_durations_seconds: list[float],
+) -> list[DownloadedBvh]:
+    """按目标动作时长重采样 BVH，保持统一帧率和首尾姿势。"""
+    if len(downloaded_files) != len(target_durations_seconds):
+        raise ValueError("BVH 文件与动作时长数量不匹配")
+
+    adjusted_files: list[DownloadedBvh] = []
+    try:
+        for downloaded, target_duration in zip(
+            downloaded_files,
+            target_durations_seconds,
+            strict=True,
+        ):
+            parsed = _parse_bvh(downloaded)
+            if target_duration < 0:
+                raise ValueError("BVH 动作时长不能为负数")
+
+            # BVH 的动作时长是首帧到末帧的时间跨度。
+            source_duration = max(0.0, (len(parsed.frames) - 1) * parsed.frame_time)
+            if source_duration == 0.0 or target_duration == 0.0:
+                output_frames = [parsed.frames[0]]
+            else:
+                output_frame_count = max(
+                    2,
+                    math.floor(target_duration / parsed.frame_time + 0.5) + 1,
+                )
+                output_frames = [
+                    parsed.frames[
+                        min(
+                            math.floor(
+                                index
+                                * source_duration
+                                / target_duration
+                                + 0.5
+                            ),
+                            len(parsed.frames) - 1,
+                        )
+                    ]
+                    for index in range(output_frame_count)
+                ]
+
+            adjusted_files.append(
+                _build_bvh(
+                    parsed,
+                    output_frames,
+                    parsed.frame_time_text,
+                    downloaded.source_filename,
+                )
+            )
+    except Exception:
+        for adjusted in adjusted_files:
+            adjusted.content.close()
+        raise
+    return adjusted_files
+
+
 def merge_bvh_files(
     downloaded_files: list[DownloadedBvh],
     intervals_seconds: list[float],

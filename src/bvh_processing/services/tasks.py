@@ -13,6 +13,7 @@ from bvh_processing.services.callback import (
 )
 from bvh_processing.services.download import DownloadedBvh, download_bvh
 from bvh_processing.services.processing import (
+    adjust_bvh_motion_durations,
     merge_bvh_files,
     normalize_bvh_frame_rates,
     process_bvh,
@@ -138,6 +139,7 @@ async def run_merge_task(
 ) -> None:
     resources: list[DownloadedBvh] = []
     normalized_resources: list[DownloadedBvh] = []
+    adjusted_resources: list[DownloadedBvh] = []
     result: DownloadedBvh | None = None
     try:
         for file_url in payload.file_urls:
@@ -147,9 +149,14 @@ async def run_merge_task(
             normalize_bvh_frame_rates,
             resources,
         )
+        adjusted_resources = await asyncio.to_thread(
+            adjust_bvh_motion_durations,
+            normalized_resources,
+            payload.bvh_motion_duration,
+        )
         result = await asyncio.to_thread(
             merge_bvh_files,
-            normalized_resources,
+            adjusted_resources,
             payload.intervals_seconds,
         )
         await send_callback(
@@ -172,6 +179,8 @@ async def run_merge_task(
     finally:
         if result is not None:
             result.content.close()
+        for resource in adjusted_resources:
+            resource.content.close()
         for resource in normalized_resources:
             resource.content.close()
         for resource in resources:
