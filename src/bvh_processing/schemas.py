@@ -46,6 +46,52 @@ class RetargetBvhRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
+class TrainBvhRequest(BaseModel):
+    action_id: str | None = Field(
+        default=None,
+        alias="actionId",
+        min_length=1,
+        description="业务后端的训练记录 ID（可选）",
+    )
+    robot_type: int = Field(
+        alias="robotType",
+        strict=True,
+        ge=1,
+        description="机器人类型编号",
+    )
+    algorithm_type: int = Field(
+        alias="algorithmType",
+        strict=True,
+        ge=1,
+        le=3,
+        description="算法类型：1 BeyondMimic，2 PHC，3 OmniH2O",
+    )
+    npz_file_url: AnyHttpUrl = Field(
+        alias="npzFileUrl",
+        description="可直接下载重定向 NPZ 文件的 MinIO 地址",
+    )
+    domain_randomization: int = Field(
+        alias="domainRandomization",
+        strict=True,
+        ge=1,
+        le=3,
+        description="域随机强度：1 低，2 中，3 高",
+    )
+    return_type: int = Field(
+        alias="returnType",
+        strict=True,
+        ge=1,
+        le=2,
+        description="回传类型：1 MP4 仿真视频，2 ONNX 模型",
+    )
+    callback_url: AnyHttpUrl = Field(
+        alias="callbackUrl",
+        description="训练结果文件的回调地址",
+    )
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
 class ProcessBvhResponse(BaseModel):
     success: bool = Field(description="是否成功接收任务，不代表最终处理成功")
     task_id: str | None = Field(alias="taskId", description="异步任务 ID")

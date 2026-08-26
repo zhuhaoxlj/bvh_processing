@@ -11,12 +11,17 @@ from httpx import Response
 
 from bvh_processing.main import create_app
 from bvh_processing.retargeting.exporter import RetargetArtifacts
+from bvh_processing.training.service import TrainingArtifact
 
 SOURCE_URL = "https://minio.example.com/motions/walk.bvh"
 CALLBACK_URL = "https://backend.example.com/callbacks/bvh"
 PROGRESS_CALLBACK_URL = "https://backend.example.com/progress-callbacks/bvh"
 RETARGET_NPZ = b"tracking-npz-content"
 RETARGET_JSON = b'{"schema":"whole_body_tracking_motion"}'
+TRAIN_NPZ_URL = "https://minio.example.com/motions/walk_g1_tracking.npz"
+TRAIN_NPZ = b"retargeted-npz-content"
+TRAIN_MP4 = b"generated-mp4-content"
+TRAIN_ONNX = b"generated-onnx-content"
 BVH_CONTENT = b"""HIERARCHY
 ROOT Hips
 {
@@ -206,6 +211,95 @@ def test_retarget_rejects_invalid_robot_type() -> None:
 
     with TestClient(create_app()) as client:
         response = client.post("/api/v1/bvh/retarget", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["success"] is False
+
+
+@pytest.mark.parametrize(
+    ("return_type", "content", "filename", "content_type"),
+    [
+        (1, TRAIN_MP4, "walk_g1_tracking_trained.mp4", "video/mp4"),
+        (
+            2,
+            TRAIN_ONNX,
+            "walk_g1_tracking_trained.onnx",
+            "application/octet-stream",
+        ),
+    ],
+)
+def test_train_accepts_task_and_callbacks_selected_artifact(
+    return_type: int,
+    content: bytes,
+    filename: str,
+    content_type: str,
+) -> None:
+    payload = {
+        "actionId": "training-42",
+        "robotType": 1,
+        "algorithmType": 1,
+        "npzFileUrl": TRAIN_NPZ_URL,
+        "domainRandomization": 2,
+        "returnType": return_type,
+        "callbackUrl": CALLBACK_URL,
+    }
+    artifact = TrainingArtifact(
+        content=BytesIO(content),
+        filename=filename,
+        content_type=content_type,
+    )
+
+    with (
+        patch(
+            "bvh_processing.training.task.run_training_program",
+            return_value=artifact,
+        ) as train_program,
+        respx.mock,
+    ):
+        respx.get(TRAIN_NPZ_URL).mock(return_value=Response(200, content=TRAIN_NPZ))
+        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+
+        with TestClient(create_app()) as client:
+            response = client.post("/api/v1/bvh/train", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["message"] == "训练任务已接收"
+    UUID(response.json()["taskId"])
+    train_payload = train_program.call_args.args[1]
+    assert train_payload.robot_type == 1
+    assert train_payload.algorithm_type == 1
+    assert train_payload.domain_randomization == 2
+    assert train_payload.return_type == return_type
+
+    callback_body = callback.calls.last.request.content
+    assert b"training-42" in callback_body
+    assert f'filename="{filename}"'.encode() in callback_body
+    assert content_type.encode() in callback_body
+    assert content in callback_body
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("algorithmType", 4),
+        ("domainRandomization", 0),
+        ("returnType", 3),
+    ],
+)
+def test_train_rejects_invalid_enum_values(field: str, value: int) -> None:
+    payload = {
+        "robotType": 1,
+        "algorithmType": 1,
+        "npzFileUrl": TRAIN_NPZ_URL,
+        "domainRandomization": 2,
+        "returnType": 1,
+        "callbackUrl": CALLBACK_URL,
+    }
+    payload[field] = value
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/v1/bvh/train", json=payload)
 
     assert response.status_code == 422
     assert response.json()["success"] is False

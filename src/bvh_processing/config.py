@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     minio_allowed_hosts: str = ""
     callback_allowed_hosts: str = ""
     callback_token: str = "action-callback-token"
+    train_command: str = ""
+    train_timeout_seconds: float = 3600.0
 
     model_config = SettingsConfigDict(
         env_prefix="BVH_",

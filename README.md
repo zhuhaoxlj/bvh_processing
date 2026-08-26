@@ -138,6 +138,44 @@ curl -X POST \
   }'
 ```
 
+## 提交训练任务
+
+### `POST /api/v1/bvh/train`
+
+请求：
+
+```json
+{
+  "actionId": "training-42",
+  "robotType": 1,
+  "algorithmType": 1,
+  "npzFileUrl": "https://minio.example.com/bucket/walk_g1_tracking.npz",
+  "domainRandomization": 2,
+  "returnType": 1,
+  "callbackUrl": "https://backend.example.com/callbacks/training"
+}
+```
+
+字段说明：
+
+- `actionId`：可选的业务训练记录 ID，回调时原样返回。
+- `algorithmType`：`1` BeyondMimic、`2` PHC、`3` OmniH2O。
+- `domainRandomization`：域随机强度，`1` 低、`2` 中、`3` 高。
+- `returnType`：`1` 回传 MP4 仿真视频，`2` 回传 ONNX 模型。
+- `npzFileUrl`：重定向 NPZ 文件的 MinIO 下载地址。
+
+服务接收任务后返回异步任务 ID，下载 NPZ 并调用 `BVH_TRAIN_COMMAND` 指定的
+训练程序。训练程序会收到以下参数：
+
+```text
+--input <NPZ路径> --output <输出路径> --robot-type <编号>
+--algorithm-type <编号> --domain-randomization <1|2|3> --return-type <1|2>
+```
+
+训练程序必须在 `--output` 指定的位置生成文件。成功后服务通过同一个
+`callbackUrl` 以 `multipart/form-data` 上传 `file`；类型 `1` 的媒体类型为
+`video/mp4`，类型 `2` 为 `application/octet-stream`。失败回调不包含文件。
+
 ## 提交多文件合并任务
 
 ### `POST /api/v1/bvh/merge`
@@ -261,6 +299,10 @@ message=<具体失败原因>
 - `BVH_MAX_FILE_SIZE_MB`：最大 BVH 文件大小，默认 `100`。
 - `BVH_MINIO_ALLOWED_HOSTS`：MinIO 主机白名单，多个用逗号分隔。
 - `BVH_CALLBACK_ALLOWED_HOSTS`：回调主机白名单，多个用逗号分隔。
+- `BVH_CALLBACK_TOKEN`：回调请求头 `X-Callback-Token` 使用的共享密钥。
+- `BVH_TRAIN_COMMAND`：训练程序入口命令，例如
+  `python /opt/robot-training/train.py`。
+- `BVH_TRAIN_TIMEOUT_SECONDS`：单次训练最长执行秒数，默认 `3600`。
 
 白名单为空时允许任意 HTTP/HTTPS 主机，仅适合本地联调；生产环境必须同时配置 MinIO 和回调主机白名单。
 

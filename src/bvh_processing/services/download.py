@@ -34,15 +34,19 @@ def _is_allowed_host(host: str, allowed_hosts: frozenset[str]) -> bool:
     )
 
 
-def _source_filename(url: str) -> str:
+def _source_filename(url: str, expected_suffix: str, fallback: str) -> str:
     name = unquote(PurePosixPath(urlsplit(url).path).name)
-    return name if name.lower().endswith(".bvh") else "source.bvh"
+    return name if name.lower().endswith(expected_suffix) else fallback
 
 
-async def download_bvh(
+async def _download_file(
     client: httpx.AsyncClient,
     source_url: str,
     settings: Settings,
+    *,
+    expected_suffix: str,
+    fallback_filename: str,
+    validate_bvh: bool,
 ) -> DownloadedBvh:
     parsed = urlsplit(source_url)
     if parsed.username or parsed.password:
@@ -111,19 +115,52 @@ async def download_bvh(
             message="MinIO 中的 BVH 文件为空",
         )
 
-    try:
-        classify_downloaded_bvh(content)
-    except BVHClassificationError as exc:
-        content.close()
-        raise BvhServiceError(
-            status_code=422,
-            code="unsupported_bvh_format",
-            message="只支持LAFAN1格式和Nokov格式的 BVH 文件",
-        ) from exc
+    if validate_bvh:
+        try:
+            classify_downloaded_bvh(content)
+        except BVHClassificationError as exc:
+            content.close()
+            raise BvhServiceError(
+                status_code=422,
+                code="unsupported_bvh_format",
+                message="只支持LAFAN1格式和Nokov格式的 BVH 文件",
+            ) from exc
 
     content.seek(0)
     return DownloadedBvh(
         content=content,
-        source_filename=_source_filename(source_url),
+        source_filename=_source_filename(
+            source_url, expected_suffix, fallback_filename
+        ),
         size=size,
+    )
+
+
+async def download_bvh(
+    client: httpx.AsyncClient,
+    source_url: str,
+    settings: Settings,
+) -> DownloadedBvh:
+    return await _download_file(
+        client,
+        source_url,
+        settings,
+        expected_suffix=".bvh",
+        fallback_filename="source.bvh",
+        validate_bvh=True,
+    )
+
+
+async def download_npz(
+    client: httpx.AsyncClient,
+    source_url: str,
+    settings: Settings,
+) -> DownloadedBvh:
+    return await _download_file(
+        client,
+        source_url,
+        settings,
+        expected_suffix=".npz",
+        fallback_filename="retargeted_motion.npz",
+        validate_bvh=False,
     )
