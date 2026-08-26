@@ -62,12 +62,8 @@ async def run_train_task(
             filename=artifact.filename,
             file_content_type=artifact.content_type,
         )
-    except Exception as error:  # noqa: BLE001
-        logger.error(
-            "BVH training task %s failed: %s",
-            task_id,
-            type(error).__name__,
-        )
+    except Exception as error:
+        logger.exception("BVH training task failed: taskId=%s", task_id)
         await _send_failure_callback(client, settings, task_id, payload, error)
     finally:
         if artifact is not None:

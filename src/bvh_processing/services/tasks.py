@@ -67,16 +67,11 @@ async def run_processing_task(
             settings,
         )
         result = process_bvh(resource, payload.handle_options)
-    except Exception as error:  # noqa: BLE001
+    except Exception as error:
         # 算法层可能抛出未知异常，任务边界必须将其转换为失败回调。
-        logger.error(
-            "BVH task %s processing failed: %s",
-            task_id,
-            type(error).__name__,
-        )
+        logger.exception("BVH processing task failed: taskId=%s", task_id)
         if resource is not None:
             resource.content.close()
-        # await _send_failure_callback(client, task_id, payload, error)
         await _send_failure_callback(client, settings, task_id, payload, error)
         return
 
@@ -171,12 +166,8 @@ async def run_merge_task(
             file=result.content,
             filename=result.source_filename,
         )
-    except Exception as error:  # noqa: BLE001
-        logger.error(
-            "BVH merge task %s failed: %s",
-            task_id,
-            type(error).__name__,
-        )
+    except Exception as error:
+        logger.exception("BVH merge task failed: taskId=%s", task_id)
         await _send_failure_callback(client, settings, task_id, payload, error)
     finally:
         if result is not None:

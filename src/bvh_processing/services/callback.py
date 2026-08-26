@@ -115,10 +115,10 @@ async def send_callback(
 
 
 def log_callback_failure(task_id: str, error: Exception) -> None:
-    logger.error(
-        "BVH task %s callback failed: %s",
+    logger.exception(
+        "BVH callback failed: taskId=%s error=%s",
         task_id,
-        type(error).__name__,
+        error,
     )
 
 

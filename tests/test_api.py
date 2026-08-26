@@ -425,11 +425,12 @@ def test_process_rejects_invalid_handle_options() -> None:
         response = client.post("/api/v1/bvh/process", json=payload)
 
     assert response.status_code == 422
-    assert response.json() == {
-        "success": False,
-        "taskId": None,
-        "message": "请求参数不正确",
-    }
+    body = response.json()
+    assert body["success"] is False
+    assert body["code"] == "request_validation_error"
+    assert body["message"] == "请求参数校验失败"
+    assert body["errors"][0]["field"] == "handleOptions"
+    assert body["errors"][0]["type"] == "list_type"
 
 
 def test_process_rejects_callback_token() -> None:
@@ -568,3 +569,57 @@ def test_health() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_service_error_returns_code_and_message() -> None:
+    payload = _request_body()
+    payload["callbackUrl"] = "https://user:password@backend.example.com/callbacks/bvh"
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/v1/bvh/process", json=payload)
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "success": False,
+        "taskId": None,
+        "code": "invalid_callback_url",
+        "message": "回调地址不能在 URL 中包含用户名或密码",
+    }
+
+
+def test_http_error_returns_useful_details() -> None:
+    with TestClient(create_app()) as client:
+        response = client.get("/missing-endpoint")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "success": False,
+        "taskId": None,
+        "code": "http_error",
+        "message": "Not Found",
+        "detail": "Not Found",
+    }
+
+
+def test_unexpected_error_logs_traceback_and_returns_error_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app = create_app()
+
+    @app.get("/test/unexpected")
+    async def unexpected() -> None:
+        raise RuntimeError("测试异常详情")
+
+    with (
+        caplog.at_level(logging.ERROR, logger="bvh_processing.main"),
+        TestClient(app, raise_server_exceptions=False) as client,
+    ):
+        response = client.get("/test/unexpected")
+
+    body = response.json()
+    assert response.status_code == 500
+    assert body["code"] == "internal_server_error"
+    assert body["message"] == "服务器内部错误"
+    UUID(body["errorId"])
+    assert "测试异常详情" in caplog.text
+    assert "Traceback" in caplog.text
