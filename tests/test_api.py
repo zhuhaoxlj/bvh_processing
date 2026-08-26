@@ -282,6 +282,7 @@ def test_merge_accepts_task_and_callbacks_with_merged_file() -> None:
         "actionId": "action-merge-42",
         "fileUrls": [MERGE_SOURCE_URL_1, MERGE_SOURCE_URL_2],
         "intervalsSeconds": [0.1],
+        "bvhMotionDuration": [3.21, 10.73],
         "callbackUrl": CALLBACK_URL,
     }
     with respx.mock:
@@ -315,6 +316,23 @@ def test_merge_rejects_wrong_interval_count() -> None:
         "actionId": "action-merge-42",
         "fileUrls": [MERGE_SOURCE_URL_1, MERGE_SOURCE_URL_2],
         "intervalsSeconds": [],
+        "bvhMotionDuration": [3.21, 10.73],
+        "callbackUrl": CALLBACK_URL,
+    }
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/v1/bvh/merge", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["success"] is False
+
+
+def test_merge_rejects_wrong_motion_duration_count() -> None:
+    payload = {
+        "actionId": "action-merge-42",
+        "fileUrls": [MERGE_SOURCE_URL_1, MERGE_SOURCE_URL_2],
+        "intervalsSeconds": [0.1],
+        "bvhMotionDuration": [],
         "callbackUrl": CALLBACK_URL,
     }
 
@@ -331,6 +349,7 @@ def test_merge_reports_incompatible_skeleton() -> None:
         "actionId": "action-merge-42",
         "fileUrls": [MERGE_SOURCE_URL_1, MERGE_SOURCE_URL_2],
         "intervalsSeconds": [0],
+        "bvhMotionDuration": [3.21, 10.73],
         "callbackUrl": CALLBACK_URL,
     }
     with respx.mock:

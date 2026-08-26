@@ -153,6 +153,7 @@ curl -X POST \
     "https://minio.example.com/bucket/run.bvh"
   ],
   "intervalsSeconds": [5, 1],
+  "bvhMotionDuration": [3.21, 10.73, 6.45],
   "callbackUrl": "https://backend.example.com/callbacks/bvh"
 }
 ```
@@ -163,6 +164,8 @@ curl -X POST \
 - `intervalsSeconds`：相邻文件之间的间隔秒数。数量必须等于
   `fileUrls` 数量减一；例如 `[5, 1]` 表示第 1、2 个文件间隔 5 秒，
   第 2、3 个文件间隔 1 秒。
+- `bvhMotionDuration`：每个 BVH 文件经用户拖动修改后的动作时长，按照
+  `fileUrls` 的顺序逐一对应；数量必须与 `fileUrls` 数量一致，且每个值都不能为负数。
 - `actionId` 和 `callbackUrl` 的含义与单文件处理接口相同。
 
 任务接收后立即返回：
