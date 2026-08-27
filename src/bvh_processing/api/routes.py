@@ -4,6 +4,7 @@ from uuid import uuid4
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
+from bvh_processing.audio_segmentation.task import run_audio_segmentation_task
 from bvh_processing.config import Settings, get_settings
 from bvh_processing.retargeting.task import run_retarget_task
 from bvh_processing.schemas import (
@@ -12,6 +13,7 @@ from bvh_processing.schemas import (
     ProcessBvhRequest,
     ProcessBvhResponse,
     RetargetBvhRequest,
+    SegmentAudioRequest,
     TrainBvhRequest,
 )
 from bvh_processing.services.callback import validate_callback_url
@@ -33,7 +35,8 @@ from bvh_processing.training.task import run_train_task
 #          ├─ /process  → run_processing_task()
 #          ├─ /merge    → run_merge_task()
 #          ├─ /retarget → run_retarget_task()
-#          └─ /train    → run_train_task()
+#          ├─ /train    → run_train_task()
+#          └─ /audio/segment → run_audio_segmentation_task()
 #                         │
 #                         ├─ 下载源文件
 #                         ├─ 执行对应算法/处理步骤
@@ -216,6 +219,51 @@ async def train(
         success=True,
         taskId=task_id,
         message="训练任务已接收",
+    )
+
+
+# ----------------------------------------------------------------------------
+# POST /api/v1/audio/segment
+#
+# 入参：SegmentAudioRequest（JSON）
+# - audioFileUrl：MinIO 音频下载地址，支持 MP3/WAV/FLAC/AIFF/OGG/M4A。
+# - callbackUrl：接收结构分段 JSON 数组的回调地址。
+# - sectionLabels：可选，LinkSeg 7 类或 9 类标签体系，默认 7。
+#
+# 后台流程：下载音频 → 独立 Python 3.9 进程运行 LinkSeg → JSON 回调。
+# 成功回调的请求体直接是分段数组，每项包含 start、end、label、label_zh。
+# ----------------------------------------------------------------------------
+@router.post(
+    "/api/v1/audio/segment",
+    response_model=ProcessBvhResponse,
+    summary="提交音频结构解析任务",
+    description=(
+        "异步下载 MinIO 中的音频文件，调用独立 LinkSeg 模块识别前奏、主歌、"
+        "副歌、桥段、间奏、尾奏和静音等结构，完成后向 callbackUrl 发送 JSON 数组。"
+    ),
+    tags=["audio"],
+)
+async def segment_audio(
+    payload: SegmentAudioRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ProcessBvhResponse:
+    validate_callback_url(str(payload.callback_url), settings.allowed_callback_hosts)
+
+    task_id = str(uuid4())
+    client: httpx.AsyncClient = request.app.state.http_client
+    background_tasks.add_task(
+        run_audio_segmentation_task,
+        client,
+        settings,
+        task_id,
+        payload,
+    )
+    return ProcessBvhResponse(
+        success=True,
+        taskId=task_id,
+        message="音频解析任务已接收",
     )
 
 

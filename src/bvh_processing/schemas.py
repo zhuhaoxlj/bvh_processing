@@ -63,14 +63,15 @@ class TrainBvhRequest(BaseModel):
         alias="robotType",
         strict=True,
         ge=1,
-        description="机器人类型编号",
+        le=1,
+        description="机器人类型：1 Unitree G1",
     )
     algorithm_type: int = Field(
         alias="algorithmType",
         strict=True,
         ge=1,
-        le=3,
-        description="算法类型：1 BeyondMimic，2 PHC，3 OmniH2O",
+        le=1,
+        description="算法类型：当前仅支持 1 BeyondMimic",
     )
     npz_file_url: AnyHttpUrl = Field(
         alias="npzFileUrl",
@@ -79,9 +80,9 @@ class TrainBvhRequest(BaseModel):
     domain_randomization: int = Field(
         alias="domainRandomization",
         strict=True,
-        ge=1,
-        le=3,
-        description="域随机强度：1 低，2 中，3 高",
+        ge=2,
+        le=2,
+        description="域随机配置：当前仅支持 2（Whole Body Tracking 内置配置）",
     )
     return_type: int = Field(
         alias="returnType",
@@ -90,12 +91,69 @@ class TrainBvhRequest(BaseModel):
         le=2,
         description="回传类型：1 MP4 仿真视频，2 ONNX 模型",
     )
+    gpu: int = Field(
+        default=0,
+        strict=True,
+        ge=0,
+        le=15,
+        description="训练使用的物理 GPU 编号",
+    )
+    num_envs: int = Field(
+        default=7168,
+        alias="numEnvs",
+        strict=True,
+        ge=1,
+        le=32768,
+        description="Isaac Lab 并行环境数量",
+    )
+    max_iterations: int = Field(
+        default=100000,
+        alias="maxIterations",
+        strict=True,
+        ge=1,
+        le=1000000,
+        description="BeyondMimic 最大训练迭代次数",
+    )
+    seed: int = Field(
+        default=42,
+        strict=True,
+        ge=0,
+        le=2147483647,
+        description="训练随机种子",
+    )
     callback_url: AnyHttpUrl = Field(
         alias="callbackUrl",
         description="训练结果文件的回调地址",
     )
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
+class SegmentAudioRequest(BaseModel):
+    audio_file_url: AnyHttpUrl = Field(
+        alias="audioFileUrl",
+        description="可直接下载音频文件的 MinIO 地址",
+    )
+    callback_url: AnyHttpUrl = Field(
+        alias="callbackUrl",
+        description="接收音乐结构分段 JSON 数组的异步回调地址",
+    )
+    section_labels: int = Field(
+        default=7,
+        alias="sectionLabels",
+        strict=True,
+        ge=7,
+        le=9,
+        description="LinkSeg 标签体系：7 或 9",
+    )
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_section_labels(self) -> "SegmentAudioRequest":
+        if self.section_labels not in (7, 9):
+            raise ValueError("sectionLabels 只支持 7 或 9")
+        return self
 
 
 class ProcessBvhResponse(BaseModel):

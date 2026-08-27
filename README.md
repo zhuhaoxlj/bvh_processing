@@ -142,6 +142,10 @@ curl -X POST \
 
 ### `POST /api/v1/bvh/train`
 
+服务下载 NPZ 后先执行完整安全与结构校验，然后使用独立的 Isaac Lab Python
+环境启动 Whole Body Tracking 的 BeyondMimic 训练。FastAPI 本身不安装 Isaac
+Sim、Isaac Lab 或 CUDA 训练依赖。
+
 请求：
 
 ```json
@@ -152,6 +156,10 @@ curl -X POST \
   "npzFileUrl": "https://minio.example.com/bucket/walk_g1_tracking.npz",
   "domainRandomization": 2,
   "returnType": 1,
+  "gpu": 0,
+  "numEnvs": 7168,
+  "maxIterations": 100000,
+  "seed": 42,
   "callbackUrl": "https://backend.example.com/callbacks/training"
 }
 ```
@@ -159,23 +167,41 @@ curl -X POST \
 字段说明：
 
 - `actionId`：可选的业务训练记录 ID，回调时原样返回。
-- `algorithmType`：`1` BeyondMimic、`2` PHC、`3` OmniH2O。
-- `domainRandomization`：域随机强度，`1` 低、`2` 中、`3` 高。
-- `returnType`：`1` 回传 MP4 仿真视频，`2` 回传 ONNX 模型。
+- `robotType`：当前只支持 `1`，即 Unitree G1。
+- `algorithmType`：当前只支持 `1`，即 BeyondMimic。
+- `domainRandomization`：当前只支持 `2`，对应训练项目内置随机化配置。
+- `returnType`：`1` 用训练 ONNX 生成并回传 MP4，`2` 回传 ONNX。
+- `gpu`：可选，物理 GPU 编号，默认 `0`。
+- `numEnvs`：可选，Isaac Lab 并行环境数，默认 `7168`。
+- `maxIterations`：可选，最大训练迭代数，默认 `100000`。
+- `seed`：可选，随机种子，默认 `42`。
 - `npzFileUrl`：重定向 NPZ 文件的 MinIO 下载地址。
 
-服务接收任务后返回异步任务 ID 并下载 NPZ。`returnType=1` 时调用
-`BVH_TRAIN_COMMAND` 指定的训练程序，训练程序会收到以下参数：
+NPZ 必须包含 `fps`、`joint_pos`、`joint_vel`、`body_pos_w`、
+`body_quat_w`、`body_lin_vel_w` 和 `body_ang_vel_w`。当前 G1 模型要求 29 个
+关节和 30 个 body；所有动作数组帧数必须一致，数值必须有限，四元数必须归一化。
+校验失败时任务不会占用 GPU，并通过 `callbackUrl` 返回失败结果。
 
-```text
---input <NPZ路径> --output <输出路径> --robot-type <编号>
---algorithm-type <编号> --domain-randomization <1|2|3> --return-type <1|2>
+训练进程使用固定参数数组启动 `scripts/rsl_rl/train.py`，不会执行请求提供的 shell
+命令。训练成功后选择本任务最新的 `model_*.onnx`。`returnType=1` 会继续调用
+`scripts/mujoco_sim2sim.py`，使用 EGL 无窗口录制一个完整动作。回调使用
+`multipart/form-data` 上传 `file`；MP4 类型为 `video/mp4`，ONNX 类型为
+`application/octet-stream`。
+
+部署前至少配置：
+
+```dotenv
+BVH_WBT_PROJECT_ROOT=/path/to/whole_body_tracking
+BVH_WBT_PYTHON=/path/to/isaaclab/bin/python
+BVH_TRAIN_WORKSPACE_ROOT=/var/tmp/bvh-training
+BVH_TRAIN_MAX_CONCURRENCY=1
+BVH_TRAIN_TIMEOUT_SECONDS=604800
+BVH_RENDER_TIMEOUT_SECONDS=1800
 ```
 
-训练程序必须在 `--output` 指定的位置生成 MP4。`returnType=2` 时不调用训练
-程序，直接回传内置的 `assets/policy_demo/1a2_34000.onnx`。服务通过同一个
-`callbackUrl` 以 `multipart/form-data` 上传 `file`；类型 `1` 的媒体类型为
-`video/mp4`，类型 `2` 为 `application/octet-stream`。失败回调不包含文件。
+当前并发限制是单个 API 进程内的信号量。生产环境若启动多个 Uvicorn worker，
+每个 worker 都会有独立限制；正式部署应改为独立 GPU worker 和持久任务队列，
+由队列按 GPU 串行分配任务。
 
 ## 提交多文件合并任务
 

@@ -1,7 +1,6 @@
 import json
 import logging
 from io import BytesIO
-from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID
 
@@ -312,6 +311,10 @@ def test_train_accepts_task_and_callbacks_selected_artifact(
     assert train_payload.algorithm_type == 1
     assert train_payload.domain_randomization == 2
     assert train_payload.return_type == return_type
+    assert train_payload.gpu == 0
+    assert train_payload.num_envs == 7168
+    assert train_payload.max_iterations == 100000
+    assert train_payload.seed == 42
 
     callback_body = callback.calls.last.request.content
     assert b"training-42" in callback_body
@@ -321,56 +324,18 @@ def test_train_accepts_task_and_callbacks_selected_artifact(
 
 
 @pytest.mark.parametrize(
-    ("return_type", "filename", "content_type"),
-    [
-        (1, "1a2_34000.mp4", "video/mp4"),
-        (2, "1a2_34000.onnx", "application/octet-stream"),
-    ],
-)
-def test_train_callbacks_fixed_demo_artifact(
-    return_type: int,
-    filename: str,
-    content_type: str,
-) -> None:
-    payload = {
-        "actionId": "training-policy-demo",
-        "robotType": 1,
-        "algorithmType": 1,
-        "npzFileUrl": TRAIN_NPZ_URL,
-        "domainRandomization": 2,
-        "returnType": return_type,
-        "callbackUrl": CALLBACK_URL,
-    }
-    artifact_path = (
-        Path(__file__).parents[1]
-        / "src"
-        / "bvh_processing"
-        / "assets"
-        / "policy_demo"
-        / filename
-    )
-
-    with respx.mock:
-        respx.get(TRAIN_NPZ_URL).mock(return_value=Response(200, content=TRAIN_NPZ))
-        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
-
-        with TestClient(create_app()) as client:
-            response = client.post("/api/v1/bvh/train", json=payload)
-
-    assert response.status_code == 200
-    assert len(callback.calls) == 1
-    callback_body = callback.calls.last.request.content
-    assert f'filename="{filename}"'.encode() in callback_body
-    assert content_type.encode() in callback_body
-    assert artifact_path.read_bytes() in callback_body
-
-
-@pytest.mark.parametrize(
     ("field", "value"),
     [
+        ("robotType", 2),
+        ("algorithmType", 2),
         ("algorithmType", 4),
+        ("domainRandomization", 1),
         ("domainRandomization", 0),
         ("returnType", 3),
+        ("gpu", -1),
+        ("numEnvs", 0),
+        ("maxIterations", 0),
+        ("seed", -1),
     ],
 )
 def test_train_rejects_invalid_enum_values(field: str, value: int) -> None:

@@ -29,6 +29,7 @@ addopts = "--disable-plugin-autoload"
 [tool.ruff]
 target-version = "py312"
 line-length = 88
+extend-exclude = ["src/bvh_processing/audio_segmentation/vendor"]
 
 [dependency-groups]
 dev = [
