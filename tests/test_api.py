@@ -210,9 +210,9 @@ def test_retarget_accepts_task_and_callbacks_with_npz_and_json(
 
     callback_body = callback.calls.last.request.content
     assert b'name="actionId"' not in callback_body
-    assert callback_body.count(b'name="file"') == 2
-    assert b'name="npzFile"' not in callback_body
-    assert b'name="jsonFile"' not in callback_body
+    assert b'name="npzFile"' in callback_body
+    assert b'name="jsonFile"' in callback_body
+    assert callback_body.count(b'name="file"') == 0
     assert b'filename="walk_g1_tracking.npz"' in callback_body
     assert b'filename="walk_g1_preview.json"' in callback_body
     assert b"application/json" in callback_body
