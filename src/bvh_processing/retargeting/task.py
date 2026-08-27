@@ -37,7 +37,7 @@ async def _send_failure_callback(
         await send_callback(
             client,
             callback_url=str(payload.callback_url),
-            action_id=None,
+            action_id=payload.action_id,
             success=False,
             message=_failure_message(error),
             callback_token=settings.callback_token,
@@ -69,7 +69,7 @@ async def run_retarget_task(
         await send_callback(
             client,
             callback_url=str(payload.callback_url),
-            action_id=None,
+            action_id=payload.action_id,
             success=True,
             message="重定向 NPZ 和 JSON 生成成功",
             callback_token=settings.callback_token,

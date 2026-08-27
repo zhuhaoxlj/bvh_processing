@@ -27,6 +27,12 @@ class ProcessBvhRequest(BaseModel):
 
 
 class RetargetBvhRequest(BaseModel):
+    action_id: str | None = Field(
+        default=None,
+        alias="actionId",
+        min_length=1,
+        description="业务后端的重定向记录 ID",
+    )
     original_file_url: AnyHttpUrl = Field(
         alias="originalFileUrl",
         description="可直接下载 BVH 文件的 MinIO 地址",
