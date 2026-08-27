@@ -78,13 +78,13 @@ async def run_retarget_task(
                     artifacts.npz,
                     artifacts.npz_filename,
                     "application/octet-stream",
-                    "npzFile",
+                    "file",
                 ),
                 CallbackFile(
                     artifacts.preview,
                     artifacts.preview_filename,
                     "application/json",
-                    "jsonFile",
+                    "file",
                 ),
             ),
         )
