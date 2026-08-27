@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ONNX Trajectory Inspector</title><link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar"><div class="brand"><span class="mark">G1</span><div><strong>Trajectory Inspector</strong><small>WHOLE-BODY TRACKING / LOCAL TOOL</small></div></div><span class="status"><i></i> LOCAL ONLY</span></header>
+  <main>
+    <section class="intro"><div><p class="eyebrow">ONNX MOTION READOUT</p><h1>看清这段动作<br><em>从哪里开始，到哪里结束。</em></h1><p class="lede">拖入一个 WBT Motion ONNX。工具会读取 pelvis 的世界轨迹、脚踝轨迹和身体朝向，不执行机器人控制。</p></div><div class="stamp"><span>50</span><small>FPS<br>REFERENCE</small></div></section>
+    <section class="workspace">
+      <div class="drop-panel" id="dropZone" tabindex="0" role="button" aria-label="拖入或选择 ONNX 文件"><input id="fileInput" type="file" accept=".onnx" hidden><div class="drop-icon">↘</div><p class="eyebrow">DROP ONNX MODEL</p><h2>把模型拖到这里</h2><p>或点击选择文件 · 仅在本机解析</p><button id="chooseButton" type="button">选择 ONNX</button><div id="uploadState" class="upload-state" aria-live="polite"></div></div>
+      <aside class="legend-panel"><p class="eyebrow">READOUT</p><div class="legend-row"><b class="dot start"></b><span>起点位置 / 起始朝向</span></div><div class="legend-row"><b class="dot end"></b><span>终点位置 / 最终朝向</span></div><div class="legend-row"><b class="line"></b><span>全程轨迹 / 起终点直线</span></div><p class="note">两种模式都固定显示起终点 pelvis 朝向；全程模式额外显示左右脚踝参考轨迹。</p></aside>
+    </section>
+    <section id="result" class="result hidden"><div class="result-head"><div><p class="eyebrow">MOTION MAP</p><h2 id="filename">—</h2></div><div class="playback"><div class="view-toggle" role="group" aria-label="轨迹显示方式"><button id="fullViewButton" class="selected" type="button">全程轨迹</button><button id="lineViewButton" type="button">起终点直线</button></div></div></div>
+      <div class="map-shell"><canvas id="map" width="1100" height="620"></canvas><div class="axis-label x">X / metres</div><div class="axis-label y">Y / metres</div></div>
+      <div class="metrics"><div><small>DURATION</small><strong id="duration">—</strong></div><div><small>DISPLACEMENT</small><strong id="displacement">—</strong></div><div><small>HEADING CHANGE</small><strong id="headingChange">—</strong></div><div><small>FINAL HEADING</small><strong id="finalHeading">—</strong></div></div>
+      <div class="footnote"><span id="frameSummary">—</span><span>起点与终点箭头表示 pelvis yaw</span></div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body></html>

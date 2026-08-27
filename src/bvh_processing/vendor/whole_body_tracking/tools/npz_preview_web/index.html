@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Motion Inspector · PKL/NPZ 转换、质检与训练</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+    <header class="masthead">
+      <a class="brand" href="/" aria-label="Motion Inspector 首页">
+        <span class="brand-mark">MI</span>
+        <span>
+          <strong>Motion Inspector</strong>
+          <small>G1 MOTION QUALITY DESK</small>
+        </span>
+      </a>
+      <div class="system-state">
+        <span class="pulse"></span>
+        <span id="systemStateText">LOCAL / ISAAC LAB</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">PKL / NPZ → INTEGRITY → TRAIN</p>
+          <h1>动作文件，<br /><em>先体检再上场。</em></h1>
+          <p class="intro">
+            拖入 BeyondMimic NPZ 或 HHTools PKL。PKL 会自动按关节名提取 29 DoF、
+            转为 50 Hz 训练 NPZ，再检查刚体结构并开放预览与训练。
+          </p>
+        </div>
+        <div class="hero-index" aria-hidden="true">
+          <span>QC</span>
+          <strong>01</strong>
+        </div>
+      </section>
+
+      <section id="gpuMonitor" class="gpu-monitor">
+        <div class="gpu-monitor-heading">
+          <div>
+            <p class="eyebrow">LIVE GPU TELEMETRY</p>
+            <h2>显卡资源监控</h2>
+            <p>读取本机 nvidia-smi 快照，展示全部可见 GPU 的显存、负载与计算进程。</p>
+          </div>
+          <div class="gpu-monitor-actions">
+            <span id="gpuUpdatedAt">等待首次刷新</span>
+            <button id="refreshGpuButton" type="button">立即刷新</button>
+          </div>
+        </div>
+        <div id="gpuCards" class="gpu-cards" aria-live="polite">
+          <div class="gpu-monitor-empty">正在读取 NVIDIA GPU 状态…</div>
+        </div>
+      </section>
+
+      <section id="activeTrainingTasks" class="active-training-tasks">
+        <div class="active-training-copy">
+          <p class="eyebrow">ACTIVE TRAINING CONTROL</p>
+          <h2>正在训练的任务</h2>
+          <p id="activeTrainingHint">正在读取全部活动训练会话…</p>
+        </div>
+        <div class="active-training-controls">
+          <label>选择要操作的任务
+            <select id="activeTrainingSelect">
+              <option value="">正在读取活动任务…</option>
+            </select>
+          </label>
+          <button id="stopSelectedTrainingButton" class="active-training-stop" type="button" disabled>停止所选任务</button>
+          <button id="refreshActiveTrainingButton" type="button">刷新任务</button>
+        </div>
+      </section>
+
+      <section id="trainingHistory" class="training-history">
+        <div class="training-history-copy">
+          <p class="eyebrow">PERSISTED TRAINING JOBS</p>
+          <h2>历史训练任务</h2>
+          <p id="trainingHistoryHint">读取本机已保存的训练任务，可重新打开并从 checkpoint 继续。</p>
+        </div>
+        <div class="training-history-tools">
+          <div class="training-history-controls">
+            <label>选择任务
+              <select id="trainingHistorySelect">
+                <option value="">正在读取历史任务…</option>
+              </select>
+            </label>
+            <button id="openTrainingHistoryButton" type="button" disabled>打开任务</button>
+            <button id="exportTrainingPackageButton" type="button" disabled>导出最新训练包</button>
+            <button id="refreshTrainingHistoryButton" type="button">刷新列表</button>
+          </div>
+          <div class="training-package-import">
+            <input id="trainingPackageInput" type="file" accept=".zip,application/zip" hidden />
+            <div
+              id="trainingPackageDropZone"
+              class="training-package-drop-zone"
+              tabindex="0"
+              role="button"
+              aria-label="选择或拖入训练恢复 ZIP 包"
+            >
+              <strong>导入训练恢复包</strong>
+              <span>点击选择或拖入 ZIP · 始终创建新任务与新 Run</span>
+            </div>
+            <div id="trainingPackageStatus" class="training-package-status" aria-live="polite">
+              <span id="trainingPackageStatusText">等待恢复包</span>
+              <div
+                id="trainingPackageProgress"
+                class="training-package-progress"
+                role="progressbar"
+                aria-label="训练恢复包上传进度"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="0"
+              ><span id="trainingPackageProgressBar"></span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div class="upload-column">
+          <div id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="选择或拖入 NPZ 或 PKL 文件">
+            <input id="fileInput" type="file" accept=".npz,.pkl,application/octet-stream" hidden />
+            <div class="drop-reticle" aria-hidden="true"><span></span><span></span></div>
+            <p class="drop-kicker">DROP MOTION FILE</p>
+            <h2>把 NPZ 或 PKL 拖到这里</h2>
+            <p>或者点击选择文件 · 最大 512 MiB</p>
+            <button class="ghost-button" type="button" tabindex="-1">选择动作文件</button>
+          </div>
+
+          <label id="quickTrainToggle" class="quick-train-toggle">
+            <input id="skipValidation" type="checkbox" />
+            <span class="toggle-switch" aria-hidden="true"><i></i></span>
+            <span class="toggle-copy">
+              <strong>快速训练通道</strong>
+              <small>这个 NPZ 之前已经检查过 · 本次跳过完整性检查</small>
+            </span>
+            <em>SKIP QC</em>
+          </label>
+
+          <div id="fileStrip" class="file-strip hidden">
+            <div class="file-icon">NPZ</div>
+            <div class="file-name">
+              <small>LOADED ASSET</small>
+              <strong id="fileName">—</strong>
+            </div>
+            <span id="fileSize">—</span>
+            <button id="replaceButton" class="icon-button" type="button" title="更换文件">↻</button>
+          </div>
+
+          <div id="uploadProgress" class="upload-progress hidden" aria-live="polite">
+            <div class="progress-heading"><span id="progressLabel">正在上传并完整读取…</span><span id="progressPercent">0%</span></div>
+            <div class="progress-track"><span id="progressBar"></span></div>
+          </div>
+        </div>
+
+        <aside class="protocol-card">
+          <p class="eyebrow">INSPECTION PROTOCOL</p>
+          <ol>
+            <li><span>01</span>PKL 安全解析 / NPZ CRC</li>
+            <li><span>02</span>29 DoF 映射与 50 Hz 转换</li>
+            <li><span>03</span>NaN、Inf 与四元数</li>
+            <li><span>04</span>29 joints / body 兼容性</li>
+            <li><span>05</span>Isaac Sim 一周期录制</li>
+          </ol>
+          <div class="protocol-note">所有检查均在本机完成，文件不会离开当前工作站。</div>
+        </aside>
+      </section>
+
+      <section id="reportSection" class="report-section hidden">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">INTEGRITY REPORT</p>
+            <h2>完整性报告</h2>
+          </div>
+          <div id="verdict" class="verdict"></div>
+        </div>
+
+        <div id="metrics" class="metrics"></div>
+
+        <div class="report-grid">
+          <div class="panel checks-panel">
+            <div class="panel-heading"><h3>检查项目</h3><span id="checkCount">—</span></div>
+            <div id="checks" class="checks"></div>
+          </div>
+          <div class="panel arrays-panel">
+            <div class="panel-heading"><h3>数组清单</h3><span>SHAPE / TYPE / RANGE</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>字段</th><th>形状</th><th>类型</th><th>范围</th></tr></thead>
+                <tbody id="arrayRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="trainingSection" class="training-section hidden">
+        <div class="training-header">
+          <div>
+            <p class="eyebrow training-eyebrow">RSL-RL / GPU TRAINING</p>
+            <h2>开始动作跟踪训练</h2>
+            <p id="trainingHint">仅对与本机 30-body G1 模型兼容的 NPZ 开放。</p>
+          </div>
+          <div class="training-badge">
+            <span id="gpuBadgeBrand">GPU</span>
+            <strong id="gpuBadgeModel">检测中</strong>
+            <small id="gpuBadgeMeta">读取 NVIDIA 设备</small>
+          </div>
+        </div>
+        <div class="training-console-grid">
+          <div class="training-controls">
+            <label>每张 GPU 并行环境数
+              <select id="numEnvs">
+                <option value="24576">24576 · 双 RTX 4090 激进档（观察 OOM）</option>
+                <option value="22528">22528 · 双 RTX 4090 高利用率档</option>
+                <option value="20480">20480 · RTX 4090 高性能档</option>
+                <option value="18432" selected>18432 · RTX 4090 推荐档</option>
+                <option value="16384">16384 · RTX 4090 稳妥档</option>
+                <option value="12288">12288 · 低显存压力</option>
+                <option value="7168">7168 · 旧 8 GB 稳定档</option>
+              </select>
+            </label>
+            <label>训练设备
+              <select id="trainingDevice" multiple size="3" aria-describedby="trainingDeviceHint">
+                <option value="cuda:0">CUDA : 0 · 检测中</option>
+              </select>
+              <small id="trainingDeviceHint" class="field-hint">Ctrl / Cmd + 点击可多选</small>
+            </label>
+            <label>最大迭代数
+              <input id="maxIterations" type="number" min="1" max="100000" value="10000" />
+            </label>
+            <label>模型保存间隔（迭代）
+              <input id="saveInterval" type="number" min="1" max="100000" value="500" />
+            </label>
+            <label class="run-name-field">Run name
+              <input id="runName" type="text" maxlength="100" spellcheck="false" />
+            </label>
+            <button id="trainButton" class="train-button" type="button">
+              <span>LAUNCH DETACHED TMUX</span><strong>开始训练</strong><i>↗</i>
+            </button>
+            <div class="ppo-controls">
+              <label>每环境采样步数
+                <select id="numStepsPerEnv">
+                  <option value="16">16 · 更频繁更新</option>
+                  <option value="24" selected>24 · 项目默认</option>
+                  <option value="32">32 · 较长轨迹</option>
+                  <option value="48">48 · 长轨迹 / 大 Batch</option>
+                </select>
+              </label>
+              <label>Mini-batches
+                <select id="numMiniBatches">
+                  <option value="4">4 · 原始配置</option>
+                  <option value="8">8 · 轻量增强</option>
+                  <option value="16" selected>16 · 双 4090 推荐</option>
+                  <option value="32">32 · 激进更新</option>
+                </select>
+              </label>
+              <label>Learning epochs
+                <input id="numLearningEpochs" type="number" min="1" max="20" value="5" />
+              </label>
+              <label>Learning rate
+                <input id="learningRate" type="number" min="0.000001" max="0.1" step="0.0001" value="0.001" />
+              </label>
+              <label>Desired KL
+                <input id="desiredKl" type="number" min="0.00001" max="1" step="0.001" value="0.01" />
+              </label>
+            </div>
+          </div>
+          <div class="training-facts">
+            <div><small>TASK</small><strong>Tracking-Flat-G1<br />Wo-State-Estimation</strong></div>
+            <div><small>LOGGER</small><strong>TensorBoard</strong></div>
+            <div><small>MODE</small><strong id="trainingMode">Headless / 1 GPU</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="trainingStatus" class="training-status hidden">
+        <div class="status-rail">
+          <span id="trainingStatusDot" class="status-dot training-dot"></span>
+          <div><small>TRAINING JOB</small><strong id="trainingStatusTitle">正在启动</strong></div>
+          <div class="training-actions">
+            <a id="tensorboardLink" href="#" target="_blank" rel="noreferrer" aria-disabled="true">TensorBoard 尚未启动</a>
+            <button id="stopTrainingButton" class="stop-button" type="button">停止训练</button>
+          </div>
+          <div class="status-time"><small>ELAPSED</small><strong id="trainingElapsed">00:00</strong></div>
+        </div>
+        <div id="trainingMeta" class="training-meta"></div>
+        <div id="resumeTrainingControls" class="resume-training-controls hidden">
+          <div>
+            <small>RESUME CHECKPOINT</small>
+            <strong>从已保存模型继续训练</strong>
+            <p id="resumeTrainingHint">正在查找当前动作任务的 checkpoint…</p>
+          </div>
+          <label>恢复点
+            <select id="resumeCheckpoint"></select>
+          </label>
+          <label>续训 GPU
+            <select id="resumeTrainingDevices" multiple size="2">
+              <option value="cuda:0">CUDA : 0 · 检测中</option>
+            </select>
+          </label>
+          <label>本次追加迭代数
+            <input id="resumeIterations" type="number" min="1" max="100000" value="10000" />
+          </label>
+          <button id="resumeTrainingButton" type="button">继续训练</button>
+        </div>
+        <div class="terminal training-terminal">
+          <div class="terminal-bar"><span>RSL-RL / TRAINING OUTPUT</span><button id="toggleTrainingLog" type="button">收起日志</button></div>
+          <pre id="trainingLog">正在创建训练 tmux 会话…</pre>
+        </div>
+      </section>
+
+      <section id="renderSection" class="render-section hidden">
+        <div class="render-copy">
+          <p class="eyebrow">ISAAC SIM PREVIEW</p>
+          <h2>生成动作预览</h2>
+          <p id="renderHint">校验通过后，可使用当前本机 G1 模型录制完整动作周期。</p>
+        </div>
+        <div class="render-controls">
+          <label>画面尺寸
+            <select id="resolution">
+              <option value="960x720">每路 960 × 720</option>
+              <option value="640x720">每路 640 × 720</option>
+              <option value="960x1080">每路 960 × 1080</option>
+            </select>
+          </label>
+          <label>机位模式
+            <select id="cameraLayout">
+              <option value="front_rear">固定正前方 + 固定正后方</option>
+              <option value="oblique">斜后方单机位</option>
+            </select>
+          </label>
+          <label>镜头视场
+            <select id="focalLength">
+              <option value="18">18mm · 超广角约 67°</option>
+              <option value="24">24mm · 广角约 53°</option>
+              <option value="35">35mm · 标准约 38°</option>
+            </select>
+          </label>
+          <label>计算设备
+            <select id="device"><option value="cuda:0">CUDA : 0</option><option value="cpu">CPU</option></select>
+          </label>
+          <button id="renderButton" class="render-button" type="button">
+            <span>GENERATE DUAL VIEW</span><strong>生成双机位 MP4</strong><i>→</i>
+          </button>
+        </div>
+      </section>
+
+      <section id="renderStatus" class="render-status hidden">
+        <div class="status-rail">
+          <span id="statusDot" class="status-dot"></span>
+          <div><small>RENDER JOB</small><strong id="statusTitle">等待中</strong></div>
+          <div class="status-time"><small>ELAPSED</small><strong id="elapsed">00:00</strong></div>
+        </div>
+        <div class="terminal">
+          <div class="terminal-bar"><span>ISAAC SIM / OUTPUT</span><button id="toggleLog" type="button">收起日志</button></div>
+          <pre id="renderLog">任务已进入队列…</pre>
+        </div>
+      </section>
+
+      <section id="videoSection" class="video-section hidden">
+        <div class="section-heading">
+          <div><p class="eyebrow">RENDER COMPLETE</p><h2>预览就绪</h2></div>
+          <a id="downloadLink" class="download-button" href="#">下载 MP4 ↓</a>
+        </div>
+        <div id="videoFrame" class="video-frame">
+          <div id="cameraLabels" class="camera-labels"><span>FIXED FRONT · 固定正前方</span><span>FIXED REAR · 固定正后方</span></div>
+          <video id="previewVideo" controls playsinline></video>
+        </div>
+        <div id="videoMeta" class="video-meta"></div>
+      </section>
+    </main>
+
+    <footer><span>MOTION INSPECTOR / LOCAL TOOL</span><span>BEYONDMIMIC · G1 · ISAAC LAB</span></footer>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>

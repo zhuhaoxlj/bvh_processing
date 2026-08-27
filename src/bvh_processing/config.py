@@ -1,6 +1,10 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_PACKAGE_ROOT = Path(__file__).resolve().parent
+_EMBEDDED_WBT_ROOT = _PACKAGE_ROOT / "vendor" / "whole_body_tracking"
 
 
 class Settings(BaseSettings):
@@ -13,9 +17,7 @@ class Settings(BaseSettings):
     render_timeout_seconds: float = 1800.0
     train_max_concurrency: int = 1
     train_workspace_root: str = "/tmp/bvh-processing-training"
-    wbt_project_root: str = (
-        "/home/mark/Documents/Dance/jtq/xcct_code/whole_body_tracking"
-    )
+    wbt_project_root: str = str(_EMBEDDED_WBT_ROOT)
     wbt_python: str = (
         "/home/mark/Project/01-RL/IsaacLab/env_isaaclab/bin/python"
     )

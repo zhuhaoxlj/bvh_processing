@@ -25,11 +25,15 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 addopts = "--disable-plugin-autoload"
+testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 88
-extend-exclude = ["src/bvh_processing/audio_segmentation/vendor"]
+extend-exclude = [
+    "src/bvh_processing/audio_segmentation/vendor",
+    "src/bvh_processing/vendor",
+]
 
 [dependency-groups]
 dev = [

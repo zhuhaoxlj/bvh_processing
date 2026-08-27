@@ -174,15 +174,19 @@ async def retarget(
 # 入参：TrainBvhRequest（JSON）
 # - actionId：可选的训练记录 ID。
 # - robotType：机器人类型。
-# - algorithmType：训练算法，1 BeyondMimic、2 PHC、3 OmniH2O。
+# - algorithmType：训练算法： 1 BeyondMimic（当前支持）、2 PHC、3 OmniH2O
 # - npzFileUrl：重定向后 NPZ 文件的 MinIO 下载地址。
-# - domainRandomization：域随机强度，1 低、2 中、3 高。
+# - domainRandomization：当前仅支持 2（训练项目内置随机化配置）。
 # - returnType：返回类型，1 MP4 仿真视频、2 ONNX 模型。
+# - gpu：可选，物理 GPU 编号，默认 0。
+# - numEnvs：可选，Isaac Lab 并行环境数，默认 7168。
+# - maxIterations：可选，最大训练迭代数，默认 100000。
+# - seed：可选，训练随机种子，默认 42。
 # - callbackUrl：训练结果回调地址。
 #
 # 后台流程：
-#   run_train_task() → download_npz() → 按 robotType、algorithmType
-#   和 domainRandomization 配置训练 → 根据 returnType 生成 MP4 或 ONNX
+#   下载 NPZ → 严格校验 G1 BeyondMimic 数组 → 调用内置 Whole Body Tracking
+#   训练 → 定位 ONNX → 按 returnType 回传 ONNX 或渲染 MP4
 #   → send_callback(file=训练产物)
 #
 # 返回：ProcessBvhResponse，表示任务是否已接收；训练产物通过回调上传。
@@ -192,9 +196,9 @@ async def retarget(
     response_model=ProcessBvhResponse,
     summary="提交机器人策略训练任务",
     description=(
-        "异步下载 MinIO 中的重定向 NPZ，并按机器人、算法和域随机强度"
-        "执行训练。returnType=1 时通过 callbackUrl 上传 MP4；"
-        "returnType=2 时上传 ONNX。"
+        "异步下载 MinIO 中的 G1 重定向 NPZ，严格校验后调用内置 Whole Body "
+        "Tracking 执行 BeyondMimic 训练。returnType=1 时通过 callbackUrl 上传 "
+        "MP4；returnType=2 时上传 ONNX。"
     ),
     tags=["bvh"],
 )

@@ -58,6 +58,26 @@ def _payload(**overrides: object) -> TrainBvhRequest:
     return TrainBvhRequest.model_validate(values)
 
 
+def test_default_settings_use_embedded_training_project() -> None:
+    settings = Settings(_env_file=None)
+    project_root = Path(settings.wbt_project_root)
+
+    assert project_root.name == "whole_body_tracking"
+    assert "bvh_processing/vendor" in project_root.as_posix()
+    assert (project_root / "scripts" / "rsl_rl" / "train.py").is_file()
+    assert (project_root / "scripts" / "mujoco_sim2sim.py").is_file()
+    assert (
+        project_root
+        / "source"
+        / "whole_body_tracking"
+        / "whole_body_tracking"
+        / "assets"
+        / "unitree_description"
+        / "mjcf"
+        / "g1.xml"
+    ).is_file()
+
+
 def test_validate_training_npz_accepts_exporter_shape(tmp_path: Path) -> None:
     path = tmp_path / "motion.npz"
     _write_npz(path)

@@ -143,8 +143,11 @@ curl -X POST \
 ### `POST /api/v1/bvh/train`
 
 服务下载 NPZ 后先执行完整安全与结构校验，然后使用独立的 Isaac Lab Python
-环境启动 Whole Body Tracking 的 BeyondMimic 训练。FastAPI 本身不安装 Isaac
-Sim、Isaac Lab 或 CUDA 训练依赖。
+环境启动 BeyondMimic 训练。Whole Body Tracking 源码及 G1 的 URDF、MuJoCo XML
+和网格资源已经内置在
+`src/bvh_processing/vendor/whole_body_tracking`，会随 Python 包一起部署。FastAPI
+运行环境本身仍不安装 Isaac Sim、Isaac Lab 或 CUDA 训练依赖；服务器需要提供安装
+好这些依赖的独立 Python 环境。
 
 请求：
 
@@ -188,16 +191,23 @@ NPZ 必须包含 `fps`、`joint_pos`、`joint_vel`、`body_pos_w`、
 `multipart/form-data` 上传 `file`；MP4 类型为 `video/mp4`，ONNX 类型为
 `application/octet-stream`。
 
-部署前至少配置：
+仓库默认从 `src/bvh_processing/vendor/whole_body_tracking` 加载训练项目，安装为
+wheel 后也会从安装包内定位，无需在服务器额外克隆源码。`UPSTREAM_COMMIT` 记录
+当前内置版本。部署时只需要配置 Isaac Lab Python；仅当需要改用外部训练源码时，
+才覆盖 `BVH_WBT_PROJECT_ROOT`：
 
 ```dotenv
-BVH_WBT_PROJECT_ROOT=/path/to/whole_body_tracking
-BVH_WBT_PYTHON=/path/to/isaaclab/bin/python
+BVH_WBT_PYTHON=/opt/isaaclab/bin/python
+# BVH_WBT_PROJECT_ROOT=/other/whole_body_tracking
 BVH_TRAIN_WORKSPACE_ROOT=/var/tmp/bvh-training
 BVH_TRAIN_MAX_CONCURRENCY=1
 BVH_TRAIN_TIMEOUT_SECONDS=604800
 BVH_RENDER_TIMEOUT_SECONDS=1800
 ```
+
+训练源码随仓库部署不等于把 Isaac Sim 打进 FastAPI 的普通虚拟环境。服务器镜像
+仍需具备 NVIDIA 驱动、CUDA、Isaac Sim、Isaac Lab、RSL-RL、ONNX Runtime、
+MuJoCo 和视频编码依赖，并让 `BVH_WBT_PYTHON` 指向该环境。
 
 当前并发限制是单个 API 进程内的信号量。生产环境若启动多个 Uvicorn worker，
 每个 worker 都会有独立限制；正式部署应改为独立 GPU worker 和持久任务队列，
