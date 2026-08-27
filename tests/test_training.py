@@ -222,6 +222,42 @@ def test_missing_isaac_lab_returns_bundled_demo_artifact(
         source.content.close()
 
 
+def test_existing_python_without_isaaclab_returns_bundled_artifact(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "wbt"
+    train_script = project_root / "scripts" / "rsl_rl" / "train.py"
+    render_script = project_root / "scripts" / "mujoco_sim2sim.py"
+    xml = project_root / "g1.xml"
+    python = tmp_path / "isaac" / "bin" / "python"
+    for path in (train_script, render_script, xml, python):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    python.chmod(0o755)
+
+    demo = tmp_path / "demo.onnx"
+    demo.write_bytes(b"demo-policy")
+    source = DownloadedBvh(BytesIO(b"unused"), "dance.npz", 6)
+    settings = Settings(
+        _env_file=None,
+        wbt_project_root=str(project_root),
+        wbt_python=str(python),
+        wbt_mujoco_xml=str(xml),
+    )
+
+    with patch("bvh_processing.training.service._DEMO_POLICY_PATH", demo):
+        artifact = asyncio.run(
+            run_training_program(source, _payload(returnType=2), settings)
+        )
+
+    try:
+        assert artifact.content.read() == b"demo-policy"
+        assert artifact.filename == "demo.onnx"
+    finally:
+        artifact.close()
+        source.content.close()
+
+
 @pytest.mark.parametrize(
     ("return_type", "expected_content", "expected_suffix", "expected_calls"),
     [

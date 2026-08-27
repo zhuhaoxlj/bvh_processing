@@ -7,6 +7,7 @@ import logging
 import os
 import shutil
 import signal
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import SpooledTemporaryFile, TemporaryDirectory
@@ -70,6 +71,20 @@ def _wbt_paths(settings: Settings) -> tuple[Path, Path, Path]:
         (xml, "G1 MuJoCo XML"),
     )
     missing = [label for path, label in required if not path.is_file()]
+    if not missing:
+        try:
+            probe = subprocess.run(
+                [str(python), "-c", "import isaaclab"],
+                cwd=project_root,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            probe = None
+        if probe is None or probe.returncode != 0:
+            missing.append("Isaac Lab Python 模块")
     if missing:
         raise BvhServiceError(
             status_code=503,
