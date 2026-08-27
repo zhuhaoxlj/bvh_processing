@@ -1,6 +1,8 @@
 from io import BytesIO
 
+import numpy as np
 import pytest
+from scipy.spatial.transform import Rotation
 
 from bvh_processing.errors import BvhServiceError
 from bvh_processing.services.download import DownloadedBvh
@@ -11,6 +13,53 @@ from bvh_processing.services.processing import (
     process_bvh,
     smooth_bvh,
 )
+from bvh_processing.services.transition import (
+    Joint,
+    Motion,
+    _align_to_boundary,
+    _canonicalize,
+    _extract_rotations,
+    _world_positions,
+)
+
+
+def _transition_motion(
+    positions: list[list[float]],
+    root_rotations: list[list[float]],
+) -> Motion:
+    root = Joint(
+        "Hips",
+        np.zeros(3),
+        [
+            "Xposition",
+            "Yposition",
+            "Zposition",
+            "Yrotation",
+            "Xrotation",
+            "Zrotation",
+        ],
+        [
+            Joint(
+                "LeftToe",
+                np.asarray([-1.0, -1.0, 0.0]),
+                ["Yrotation", "Xrotation", "Zrotation"],
+            ),
+            Joint(
+                "RightToe",
+                np.asarray([1.0, -1.0, 0.0]),
+                ["Yrotation", "Xrotation", "Zrotation"],
+            ),
+        ],
+    )
+    frames = np.concatenate(
+        [
+            np.asarray(positions, dtype=float),
+            np.asarray(root_rotations, dtype=float),
+            np.zeros((len(positions), 6)),
+        ],
+        axis=1,
+    )
+    return Motion(root, frames, 1.0 / 120.0)
 
 
 def _downloaded(frames: list[list[float]]) -> DownloadedBvh:
@@ -112,3 +161,53 @@ def test_process_bvh_rejects_unknown_option() -> None:
         process_bvh(source, [5])
 
     assert error.value.code == "invalid_handle_option"
+
+
+def test_transition_discards_exporter_startup_ramp() -> None:
+    positions = [
+        [-25.0, 90.0, -10.0],
+        [-50.0, 85.0, -20.0],
+        [-75.0, 80.0, -30.0],
+        [-100.0, 75.0, -40.0],
+        *[[-100.0 + index * 0.02, 75.0, -40.0] for index in range(12)],
+    ]
+    rotations = [
+        [25.0, 5.0, 1.0],
+        [50.0, 10.0, 2.0],
+        [75.0, 15.0, 3.0],
+        [100.0, 20.0, 4.0],
+        *[[100.0 + index * 0.02, 20.0, 4.0] for index in range(12)],
+    ]
+
+    canonical = _canonicalize(_transition_motion(positions, rotations))
+
+    assert canonical.frames[0, :3] == pytest.approx(positions[3])
+    steps = np.linalg.norm(np.diff(canonical.frames[:, :3], axis=0), axis=1)
+    assert np.max(steps) < 0.1
+
+
+def test_boundary_alignment_preserves_following_torso_tilt_and_locks_foot() -> None:
+    previous = _transition_motion(
+        [[0.0, 1.0, 0.0], [0.1, 1.0, 0.0]],
+        [[70.0, -8.0, 3.0], [80.0, -8.0, 3.0]],
+    )
+    following = _transition_motion(
+        [[5.0, 2.0, 7.0], [5.1, 2.0, 7.0]],
+        [[20.0, 25.0, -12.0], [22.0, 25.0, -12.0]],
+    )
+
+    aligned, support_name = _align_to_boundary(previous, following)
+    aligned_rotations, _ = _extract_rotations(aligned)
+    source_rotation = Rotation.from_euler("YXZ", [20.0, 25.0, -12.0], degrees=True)
+    aligned_rotation = Rotation.from_euler(
+        "YXZ", aligned_rotations[0, 0], degrees=True
+    )
+    yaw_only_delta = aligned_rotation * source_rotation.inv()
+    delta_euler = yaw_only_delta.as_euler("YXZ", degrees=True)
+
+    assert delta_euler[1:] == pytest.approx([0.0, 0.0], abs=1e-8)
+    joint_names = [joint.name for joint in previous.joints]
+    support_index = joint_names.index(support_name)
+    previous_foot = _world_positions(previous, previous.frames[-1])[support_index]
+    following_foot = _world_positions(aligned, aligned.frames[0])[support_index]
+    assert following_foot == pytest.approx(previous_foot)

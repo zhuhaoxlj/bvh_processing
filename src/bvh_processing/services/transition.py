@@ -189,6 +189,35 @@ def _standard_motion(
     return Motion(_canonical_hierarchy(root), frames, frame_time)
 
 
+def _initial_artifact_frame_count(
+    rotations: np.ndarray,
+    positions: np.ndarray,
+) -> int:
+    """识别导出器在动作开头写入的零姿势缩放坡道。"""
+    if len(positions) < 12:
+        return 0
+
+    position_steps = np.linalg.norm(np.diff(positions, axis=0), axis=1)
+    root_orientations = Rotation.from_euler("YXZ", rotations[:, 0], degrees=True)
+    rotation_steps = np.degrees(
+        (root_orientations[:-1].inv() * root_orientations[1:]).magnitude()
+    )
+    baseline_start = min(10, len(position_steps) // 3)
+    position_baseline = max(float(np.median(position_steps[baseline_start:])), 1e-6)
+    rotation_baseline = max(float(np.median(rotation_steps[baseline_start:])), 1e-6)
+    anomalous = (position_steps > position_baseline * 20.0) & (
+        rotation_steps > rotation_baseline * 20.0
+    )
+
+    # 只处理从首帧开始、最多 8 帧的连续异常；动作中途的快速运动不能被裁掉。
+    count = 0
+    for is_anomalous in anomalous[:8]:
+        if not is_anomalous:
+            break
+        count += 1
+    return count
+
+
 def _canonicalize(
     motion: Motion,
     *,
@@ -196,6 +225,10 @@ def _canonicalize(
     drop_initial_rest_frame: bool = False,
 ) -> Motion:
     rotations, positions = _extract_rotations(motion)
+    artifact_count = _initial_artifact_frame_count(rotations, positions)
+    if artifact_count:
+        rotations = rotations[artifact_count:]
+        positions = positions[artifact_count:]
     if len(rotations) == 1:
         # 零时长或单帧动作仍可作为静止边界参与过渡。
         rotations = np.repeat(rotations, 2, axis=0)
@@ -276,19 +309,33 @@ def _support_foot_name(first: Motion, second: Motion) -> str:
     return min(scores, key=scores.__getitem__)
 
 
+def _yaw(rotation: Rotation) -> float:
+    """提取 Y-up 坐标系中的水平朝向，忽略躯干俯仰和侧倾。"""
+    forward = rotation.apply(np.asarray([0.0, 0.0, 1.0]))
+    if np.hypot(forward[0], forward[2]) < 1e-8:
+        # 躯干接近竖直时使用右方向，避免水平投影退化。
+        right = rotation.apply(np.asarray([1.0, 0.0, 0.0]))
+        return float(np.arctan2(-right[2], right[0]))
+    return float(np.arctan2(forward[0], forward[2]))
+
+
 def _align_to_boundary(previous: Motion, following: Motion) -> tuple[Motion, str]:
     _validate_topology(previous, following)
     previous_rotations, previous_positions = _extract_rotations(previous)
     rotations, positions = _extract_rotations(following)
     previous_root = Rotation.from_euler("YXZ", previous_rotations[-1, 0], degrees=True)
     following_root = Rotation.from_euler("YXZ", rotations[0, 0], degrees=True)
-    root_alignment = previous_root * following_root.inv()
-    aligned_positions = previous_positions[-1] + root_alignment.apply(
+    # 只统一水平朝向。后续动作原本的躯干俯仰和侧倾必须保留，交给桥接段过渡。
+    yaw_alignment = Rotation.from_euler(
+        "Y",
+        _yaw(previous_root) - _yaw(following_root),
+    )
+    aligned_positions = previous_positions[-1] + yaw_alignment.apply(
         positions - positions[0]
     )
     aligned_rotations = rotations.copy()
     root_rotations = Rotation.from_euler("YXZ", aligned_rotations[:, 0], degrees=True)
-    aligned_rotations[:, 0] = (root_alignment * root_rotations).as_euler(
+    aligned_rotations[:, 0] = (yaw_alignment * root_rotations).as_euler(
         "YXZ", degrees=True
     )
     provisional = _standard_motion(
