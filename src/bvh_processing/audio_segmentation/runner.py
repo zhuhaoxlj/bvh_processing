@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from argparse import Namespace
 from pathlib import Path
@@ -12,6 +13,7 @@ LINKSEG_ROOT = Path(__file__).resolve().parent / "vendor" / "linkseg"
 LINKSEG_SRC = LINKSEG_ROOT / "src"
 sys.path.insert(0, str(LINKSEG_SRC))
 
+import imageio_ffmpeg
 import librosa
 import numpy as np
 import torch
@@ -83,7 +85,34 @@ def _merge_segments(times: list[float], labels: list[str]) -> list[dict[str, obj
     return segments
 
 
+def _normalize_audio(audio_path: Path) -> Path:
+    if audio_path.suffix.lower() in {".wav", ".wave"}:
+        return audio_path
+
+    normalized_path = audio_path.with_name(f"{audio_path.stem}.wav")
+    subprocess.run(
+        [
+            imageio_ffmpeg.get_ffmpeg_exe(),
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(audio_path),
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "22050",
+            str(normalized_path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return normalized_path
+
+
 def analyze(audio_path: Path, labels: int) -> list[dict[str, object]]:
+    audio_path = _normalize_audio(audio_path)
     job_root = audio_path.parents[1]
     for directory in ("audio_npy", "features", "predictions"):
         (job_root / directory).mkdir(parents=True, exist_ok=True)

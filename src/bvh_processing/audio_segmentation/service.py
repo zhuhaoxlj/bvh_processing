@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
 
@@ -124,7 +125,7 @@ async def analyze_audio(
 ) -> list[dict[str, object]]:
     output_path = workspace / "segments.json"
     process = await asyncio.create_subprocess_exec(
-        settings.linkseg_python,
+        sys.executable,
         str(_RUNNER),
         str(audio_path),
         str(output_path),

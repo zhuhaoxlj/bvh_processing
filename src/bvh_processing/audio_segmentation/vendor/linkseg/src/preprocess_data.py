@@ -1,4 +1,13 @@
 import argparse
+import collections
+import collections.abc
+
+# madmom 0.16.1 still imports these names from collections on Python 3.11.
+collections.MutableSequence = collections.abc.MutableSequence
+collections.MutableMapping = collections.abc.MutableMapping
+collections.MutableSet = collections.abc.MutableSet
+collections.Sequence = collections.abc.Sequence
+
 import madmom
 import os
 import numpy as np
@@ -9,22 +18,10 @@ import multiprocessing as mp
 
 
 from tqdm import tqdm
-from pydub import AudioSegment
 from data_utils import FileStruct, write_beats
 
 
 def madmom_beats(file_struct, y_, sr):
-    
-    if '.mp3' in str(file_struct.audio_file):
-        song_name = str(file_struct.audio_file).split('.mp3')[0]
-        dst = os.path.join(file_struct.ds_path, song_name+'.wav')                                                  
-        sound = AudioSegment.from_mp3(file_struct.audio_file)
-        sound.export(dst, format="wav")
-        audiofile = dst
-        os.remove(file_struct.audio_file)
-        file_struct.audio_file = audiofile
-        y_, sr = librosa.load(audiofile, mono=True)
-    
     if sr != 44100:
         y_ = librosa.resample(y_, orig_sr=sr, target_sr=44100)
         sr = 44100
@@ -76,21 +73,6 @@ def process_audio(file_struct):
     if not os.path.exists(file_struct.audio_npy_file):
         x = get_npy(file_struct.audio_file)
         np.save(open(file_struct.audio_npy_file, 'wb'), x)
-
-
-def wav_conversion(file):
-    if '.mp3' in file:
-        song_name = str(file).split('.mp3')[0]
-        file_struct = FileStruct(file)
-        dst = song_name+'.wav'
-        # convert wav to mp3                                                            
-        sound = AudioSegment.from_mp3(file_struct.audio_file)
-        sound.export(dst, format="wav")
-        os.remove(file_struct.audio_file)
-        audiofile = dst
-        return audiofile
-    else:
-        return file
 
 
 

@@ -6,8 +6,11 @@
 
 ## 环境要求
 
-- Python 3.12+
+- Python 3.11（`uv sync` 会依据 `.python-version` 自动准备）
 - uv
+
+音频结构解析所需的 LinkSeg、PyTorch、DGL 和 madmom 依赖均由根目录的
+`pyproject.toml` 与 `uv.lock` 管理，不需要另行创建或配置 LinkSeg 虚拟环境。
 
 ## 安装与启动
 

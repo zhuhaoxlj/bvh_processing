@@ -27,7 +27,6 @@ class Settings(BaseSettings):
         "unitree_description/mjcf/g1.xml"
     )
     npz_max_uncompressed_mb: int = 2048
-    linkseg_python: str = "/home/mark/Project/02-Python/LinkSeg/.venv/bin/python"
     audio_analysis_timeout_seconds: float = 1800.0
 
     model_config = SettingsConfigDict(
