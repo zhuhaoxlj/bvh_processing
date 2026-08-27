@@ -14,9 +14,9 @@ from bvh_processing.schemas import TrainBvhRequest
 from bvh_processing.services.download import DownloadedBvh
 
 _SPOOL_MEMORY_LIMIT = 8 * 1024 * 1024
-_DEMO_POLICY_PATH = (
-    Path(__file__).resolve().parents[1] / "assets" / "policy_demo" / "1a2_34000.onnx"
-)
+_DEMO_POLICY_DIRECTORY = Path(__file__).resolve().parents[1] / "assets" / "policy_demo"
+_DEMO_POLICY_PATH = _DEMO_POLICY_DIRECTORY / "1a2_34000.onnx"
+_DEMO_VIDEO_PATH = _DEMO_POLICY_DIRECTORY / "1a2_34000.mp4"
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,17 +35,17 @@ def _artifact_details(return_type: int) -> tuple[str, str]:
     return "trained_policy.onnx", "application/octet-stream"
 
 
-def _demo_policy_artifact() -> TrainingArtifact:
-    if not _DEMO_POLICY_PATH.is_file() or _DEMO_POLICY_PATH.stat().st_size == 0:
+def _demo_artifact(path: Path, content_type: str) -> TrainingArtifact:
+    if not path.is_file() or path.stat().st_size == 0:
         raise BvhServiceError(
             status_code=500,
             code="demo_policy_missing",
-            message="固定 ONNX 策略文件不存在",
+            message=f"固定演示文件不存在：{path.name}",
         )
     return TrainingArtifact(
-        content=_DEMO_POLICY_PATH.open("rb"),
-        filename=_DEMO_POLICY_PATH.name,
-        content_type="application/octet-stream",
+        content=path.open("rb"),
+        filename=path.name,
+        content_type=content_type,
     )
 
 
@@ -54,9 +54,11 @@ async def run_training_program(
     payload: TrainBvhRequest,
     settings: Settings,
 ) -> TrainingArtifact:
-    """回传固定 ONNX，或运行训练命令生成 MP4。"""
+    """回传固定 MP4/ONNX 演示产物，或运行已配置的训练命令。"""
+    if payload.return_type == 1:
+        return _demo_artifact(_DEMO_VIDEO_PATH, "video/mp4")
     if payload.return_type == 2:
-        return _demo_policy_artifact()
+        return _demo_artifact(_DEMO_POLICY_PATH, "application/octet-stream")
 
     command = shlex.split(settings.train_command)
     if not command:

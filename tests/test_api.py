@@ -320,23 +320,34 @@ def test_train_accepts_task_and_callbacks_selected_artifact(
     assert content in callback_body
 
 
-def test_train_return_type_two_callbacks_demo_policy() -> None:
+@pytest.mark.parametrize(
+    ("return_type", "filename", "content_type"),
+    [
+        (1, "1a2_34000.mp4", "video/mp4"),
+        (2, "1a2_34000.onnx", "application/octet-stream"),
+    ],
+)
+def test_train_callbacks_fixed_demo_artifact(
+    return_type: int,
+    filename: str,
+    content_type: str,
+) -> None:
     payload = {
         "actionId": "training-policy-demo",
         "robotType": 1,
         "algorithmType": 1,
         "npzFileUrl": TRAIN_NPZ_URL,
         "domainRandomization": 2,
-        "returnType": 2,
+        "returnType": return_type,
         "callbackUrl": CALLBACK_URL,
     }
-    policy_path = (
+    artifact_path = (
         Path(__file__).parents[1]
         / "src"
         / "bvh_processing"
         / "assets"
         / "policy_demo"
-        / "1a2_34000.onnx"
+        / filename
     )
 
     with respx.mock:
@@ -349,9 +360,9 @@ def test_train_return_type_two_callbacks_demo_policy() -> None:
     assert response.status_code == 200
     assert len(callback.calls) == 1
     callback_body = callback.calls.last.request.content
-    assert b'filename="1a2_34000.onnx"' in callback_body
-    assert b"application/octet-stream" in callback_body
-    assert policy_path.read_bytes() in callback_body
+    assert f'filename="{filename}"'.encode() in callback_body
+    assert content_type.encode() in callback_body
+    assert artifact_path.read_bytes() in callback_body
 
 
 @pytest.mark.parametrize(
