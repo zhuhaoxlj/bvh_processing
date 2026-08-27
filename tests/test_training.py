@@ -181,6 +181,48 @@ def test_run_process_terminates_on_timeout(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
+    ("return_type", "asset_name", "content_type", "content"),
+    [
+        (1, "demo.mp4", "video/mp4", b"demo-video"),
+        (2, "demo.onnx", "application/octet-stream", b"demo-policy"),
+    ],
+)
+def test_missing_isaac_lab_returns_bundled_demo_artifact(
+    tmp_path: Path,
+    return_type: int,
+    asset_name: str,
+    content_type: str,
+    content: bytes,
+) -> None:
+    asset_path = tmp_path / asset_name
+    asset_path.write_bytes(content)
+    source = DownloadedBvh(
+        content=BytesIO(b"downloaded-npz-is-unused-in-fallback"),
+        source_filename="dance_g1_tracking.npz",
+        size=1,
+    )
+    settings = Settings(
+        _env_file=None,
+        wbt_project_root=str(tmp_path / "missing-wbt"),
+        wbt_python=str(tmp_path / "missing-isaac" / "python"),
+    )
+
+    constant = "_DEMO_VIDEO_PATH" if return_type == 1 else "_DEMO_POLICY_PATH"
+    with patch(f"bvh_processing.training.service.{constant}", asset_path):
+        artifact = asyncio.run(
+            run_training_program(source, _payload(returnType=return_type), settings)
+        )
+
+    try:
+        assert artifact.content.read() == content
+        assert artifact.filename == asset_name
+        assert artifact.content_type == content_type
+    finally:
+        artifact.close()
+        source.content.close()
+
+
+@pytest.mark.parametrize(
     ("return_type", "expected_content", "expected_suffix", "expected_calls"),
     [
         (2, b"onnx-output", ".onnx", 1),

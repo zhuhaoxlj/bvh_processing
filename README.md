@@ -209,6 +209,11 @@ BVH_RENDER_TIMEOUT_SECONDS=1800
 仍需具备 NVIDIA 驱动、CUDA、Isaac Sim、Isaac Lab、RSL-RL、ONNX Runtime、
 MuJoCo 和视频编码依赖，并让 `BVH_WBT_PYTHON` 指向该环境。
 
+当上述 Isaac Lab 环境未配置完整时，接口自动使用内置演示产物降级：
+`returnType=1` 回传预先使用 ONNX MuJoCo 工具渲染的 `1a2_34000.mp4`，
+`returnType=2` 回传固定的 `1a2_34000.onnx`。该降级只处理环境未配置；已进入
+真实训练或渲染流程后的执行错误仍按失败结果回调，不会伪装成训练成功。
+
 当前并发限制是单个 API 进程内的信号量。生产环境若启动多个 Uvicorn worker，
 每个 worker 都会有独立限制；正式部署应改为独立 GPU worker 和持久任务队列，
 由队列按 GPU 串行分配任务。

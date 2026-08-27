@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import shutil
 import signal
@@ -19,9 +20,14 @@ from bvh_processing.services.download import DownloadedBvh
 from bvh_processing.training.validation import validate_training_npz
 
 _SPOOL_MEMORY_LIMIT = 8 * 1024 * 1024
+_DEMO_POLICY_DIRECTORY = Path(__file__).resolve().parents[1] / "assets" / "policy_demo"
+_DEMO_POLICY_PATH = _DEMO_POLICY_DIRECTORY / "1a2_34000.onnx"
+_DEMO_VIDEO_PATH = _DEMO_POLICY_DIRECTORY / "1a2_34000.mp4"
 _SEMAPHORE_LOOP: asyncio.AbstractEventLoop | None = None
 _TRAINING_SEMAPHORE: asyncio.Semaphore | None = None
 _TRAINING_SEMAPHORE_SIZE = 0
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,9 +215,7 @@ async def _run_process(
 def _find_onnx(project_root: Path, run_name: str) -> Path:
     experiment_root = project_root / "logs" / "rsl_rl" / "g1_flat"
     run_directories = [
-        path
-        for path in experiment_root.glob(f"*_{run_name}")
-        if path.is_dir()
+        path for path in experiment_root.glob(f"*_{run_name}") if path.is_dir()
     ]
     if not run_directories:
         raise BvhServiceError(
@@ -251,14 +255,34 @@ def _copy_artifact(path: Path, filename: str, content_type: str) -> TrainingArti
     return TrainingArtifact(content, filename, content_type)
 
 
+def _demo_artifact(return_type: int) -> TrainingArtifact:
+    if return_type == 1:
+        return _copy_artifact(_DEMO_VIDEO_PATH, _DEMO_VIDEO_PATH.name, "video/mp4")
+    return _copy_artifact(
+        _DEMO_POLICY_PATH,
+        _DEMO_POLICY_PATH.name,
+        "application/octet-stream",
+    )
+
+
 async def run_training_program(
     source: DownloadedBvh,
     payload: TrainBvhRequest,
     settings: Settings,
 ) -> TrainingArtifact:
-    """校验动作文件，在独立 Isaac Lab 环境训练并生成请求的产物。"""
+    """有 Isaac Lab 时训练，否则回传内置的演示产物。"""
 
-    project_root, python, xml = _wbt_paths(settings)
+    try:
+        project_root, python, xml = _wbt_paths(settings)
+    except BvhServiceError as error:
+        if error.code != "training_environment_not_configured":
+            raise
+        logger.warning(
+            "Isaac Lab environment unavailable; returning bundled demo artifact: %s",
+            error.message,
+        )
+        return _demo_artifact(payload.return_type)
+
     workspace_root = Path(settings.train_workspace_root).expanduser().resolve()
     workspace_root.mkdir(parents=True, exist_ok=True)
     run_name = f"bvh_{uuid4().hex}"
