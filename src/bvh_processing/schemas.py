@@ -129,33 +129,6 @@ class TrainBvhRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
-class SegmentAudioRequest(BaseModel):
-    audio_file_url: AnyHttpUrl = Field(
-        alias="audioFileUrl",
-        description="可直接下载音频文件的 MinIO 地址",
-    )
-    callback_url: AnyHttpUrl = Field(
-        alias="callbackUrl",
-        description="接收音乐结构分段 JSON 数组的异步回调地址",
-    )
-    section_labels: int = Field(
-        default=7,
-        alias="sectionLabels",
-        strict=True,
-        ge=7,
-        le=9,
-        description="LinkSeg 标签体系：7 或 9",
-    )
-
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
-
-    @model_validator(mode="after")
-    def validate_section_labels(self) -> "SegmentAudioRequest":
-        if self.section_labels not in (7, 9):
-            raise ValueError("sectionLabels 只支持 7 或 9")
-        return self
-
-
 class ProcessBvhResponse(BaseModel):
     success: bool = Field(description="是否成功接收任务，不代表最终处理成功")
     task_id: str | None = Field(alias="taskId", description="异步任务 ID")

@@ -248,15 +248,29 @@ def _linear_velocity(values: np.ndarray) -> np.ndarray:
 
 
 def _angular_velocity(quaternions_wxyz: np.ndarray) -> np.ndarray:
-    rotations = Rotation.from_quat(quaternions_wxyz[..., [1, 2, 3, 0]])
-    frame_count = quaternions_wxyz.shape[0]
-    velocity = np.empty((*quaternions_wxyz.shape[:2], 3), dtype=np.float64)
+    quaternion_shape = quaternions_wxyz.shape
+    rotations = Rotation.from_quat(
+        quaternions_wxyz[..., [1, 2, 3, 0]].reshape(-1, 4)
+    )
+    frame_count = quaternion_shape[0]
+    rotations_per_frame = int(np.prod(quaternion_shape[1:-1]))
+    velocity = np.empty((*quaternion_shape[:-1], 3), dtype=np.float64)
     for frame_index in range(frame_count):
         previous_index = max(0, frame_index - 1)
         next_index = min(frame_count - 1, frame_index + 1)
         elapsed = (next_index - previous_index) / _OUTPUT_FPS
-        relative = rotations[previous_index].inv() * rotations[next_index]
-        velocity[frame_index] = relative.as_rotvec() / elapsed
+        previous = rotations[
+            previous_index * rotations_per_frame :
+            (previous_index + 1) * rotations_per_frame
+        ]
+        following = rotations[
+            next_index * rotations_per_frame :
+            (next_index + 1) * rotations_per_frame
+        ]
+        relative = previous.inv() * following
+        velocity[frame_index] = relative.as_rotvec().reshape(
+            (*quaternion_shape[1:-1], 3)
+        ) / elapsed
     return velocity
 
 

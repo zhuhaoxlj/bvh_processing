@@ -27,7 +27,6 @@ class Settings(BaseSettings):
         "unitree_description/mjcf/g1.xml"
     )
     npz_max_uncompressed_mb: int = 2048
-    audio_analysis_timeout_seconds: float = 1800.0
 
     model_config = SettingsConfigDict(
         env_prefix="BVH_",
