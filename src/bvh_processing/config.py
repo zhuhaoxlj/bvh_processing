@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     minio_allowed_hosts: str = ""
     callback_allowed_hosts: str = ""
     callback_token: str = "action-callback-token"
+    mock: bool = True
     gpu_control_api_url: str = Field(
         default=(
             "https://y7b4jaa2-x1b58667-6666.zj02restapi.gpufree.cn:8443"

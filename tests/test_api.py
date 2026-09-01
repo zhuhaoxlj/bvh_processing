@@ -278,10 +278,51 @@ def _create_training_test_app() -> FastAPI:
     app = create_app()
     app.dependency_overrides[get_settings] = lambda: Settings(
         _env_file=None,
+        mock=False,
         gpu_control_api_url=GPU_CONTROL_URL,
         gpu_control_api_token=GPU_TOKEN,
     )
     return app
+
+
+@pytest.mark.parametrize(
+    ("return_type", "expected_filenames"),
+    [
+        (1, ("1a2_34000.mp4", "1a2_34000.onnx")),
+        (2, ("1a2_34000.onnx",)),
+    ],
+)
+def test_train_mock_callbacks_demo_artifacts_without_downloading_npz(
+    return_type: int,
+    expected_filenames: tuple[str, ...],
+) -> None:
+    app = create_app()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None,
+        mock=True,
+    )
+
+    with respx.mock:
+        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/bvh/train",
+                json=_train_payload(returnType=return_type),
+            )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["message"] == "Mock 训练任务已接收"
+    UUID(response.json()["taskId"])
+    assert len(callback.calls) == 1
+
+    callback_body = callback.calls[0].request.content
+    assert callback_body.count(b'name="file"') == len(expected_filenames)
+    for filename in expected_filenames:
+        assert f'filename="{filename}"'.encode() in callback_body
+    assert (b'filename="1a2_34000.mp4"' in callback_body) is (return_type == 1)
+    assert b'filename="1a2_34000.onnx"' in callback_body
+    assert "Mock 训练成功".encode() in callback_body
 
 
 def test_train_uploads_npz_selects_first_available_gpu_and_starts_job() -> None:

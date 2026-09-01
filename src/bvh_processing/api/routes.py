@@ -18,6 +18,7 @@ from bvh_processing.services.callback import validate_callback_url
 from bvh_processing.services.download import download_npz
 from bvh_processing.services.tasks import run_merge_task, run_processing_task
 from bvh_processing.training.control import submit_training_job
+from bvh_processing.training.mock import run_mock_train_task
 
 # ============================================================================
 # 接口总流程
@@ -25,7 +26,8 @@ from bvh_processing.training.control import submit_training_job
 # /process、/merge、/retarget：校验请求后注册后台任务并立即返回，由后台任务
 # 下载源文件、执行处理、调用 callbackUrl 回传结果并释放资源。
 #
-# /train：在请求内下载 NPZ、上传 GPU 控制服务、查询空闲 GPU 并创建远端
+# /train：Mock 模式按 returnType 回调内置演示文件，不下载 NPZ 或调用 GPU；
+# 真实模式在请求内下载 NPZ、上传 GPU 控制服务、查询空闲 GPU 并创建远端
 # 训练任务；创建成功后返回远端 job ID，GPU 不足或远端调用失败则直接返回错误。
 # 远端训练进程本身异步运行，本服务不等待训练完成。
 # ============================================================================
@@ -159,39 +161,60 @@ async def retarget(
 # - algorithmType：训练算法： 1 BeyondMimic（当前支持）、2 PHC、3 OmniH2O
 # - npzFileUrl：重定向后 NPZ 文件的 MinIO 下载地址。
 # - domainRandomization：当前仅支持 2（训练项目内置随机化配置）。
-# - returnType：返回类型，1 MP4 仿真视频、2 ONNX 模型。
-# - gpu：可选，物理 GPU 编号，默认 0。
+# - returnType：返回类型，1 MP4 仿真视频和 ONNX 模型 2 ONNX 模型。
+# - gpu：可选，物理 GPU 编号，默认 0。（TODO 支持 GPU id 数组）
 # - numEnvs：可选，Isaac Lab 并行环境数，默认 7168。
 # - maxIterations：可选，最大训练迭代数，默认 100000。
 # - seed：可选，训练随机种子，默认 42。
 # - callbackUrl：训练结果回调地址。
 #
-# 处理流程（提交前同步执行）：
+# Mock 模式（默认）：
+#   returnType=1 → 通过 callbackUrl 回调内置 MP4 和 ONNX
+#   returnType=2 → 通过 callbackUrl 回调内置 ONNX
+#
+# 真实模式（启动时指定 --mock 0）：（TODO 任务完成或者提前结束的按钮触发回调）
 #   下载 NPZ → 上传 GPU Training Control → 查询空闲 GPU
 #   → 按物理编号选择第一张空闲卡 → 创建远端训练任务
 #
-# 返回：ProcessBvhResponse。taskId 为 GPU 控制服务返回的训练任务 ID。
-# 如果所有 GPU 均不可用，则返回 409 和“当前显卡训练任务已满”。
+# 返回：ProcessBvhResponse。Mock 模式的 taskId 为本地任务 ID；真实模式的
+# taskId 为 GPU 控制服务返回的训练任务 ID。
 # ----------------------------------------------------------------------------
 @router.post(
     "/api/v1/bvh/train",
     response_model=ProcessBvhResponse,
     summary="提交机器人策略训练任务",
     description=(
-        "同步下载 MinIO 中的 G1 重定向 NPZ，上传到 GPU Training Control，"
-        "自动选择编号最小的空闲 GPU 并创建 BeyondMimic 训练任务。训练由远端"
-        "服务异步执行；taskId 为远端训练任务 ID。"
+        "默认使用 Mock 模式，returnType=1 回调内置 MP4 和 ONNX，"
+        "returnType=2 仅回调内置 ONNX。使用 --mock 0 启动时，下载 MinIO "
+        "中的 NPZ，上传到 GPU Training Control，自动选择空闲 GPU 并创建"
+        "远端 BeyondMimic 训练任务。"
     ),
     tags=["bvh"],
 )
 async def train(
     payload: TrainBvhRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> ProcessBvhResponse:
     validate_callback_url(str(payload.callback_url), settings.allowed_callback_hosts)
 
     client: httpx.AsyncClient = request.app.state.http_client
+    if settings.mock:
+        task_id = str(uuid4())
+        background_tasks.add_task(
+            run_mock_train_task,
+            client,
+            settings,
+            task_id,
+            payload,
+        )
+        return ProcessBvhResponse(
+            success=True,
+            taskId=task_id,
+            message="Mock 训练任务已接收",
+        )
+
     source = await download_npz(client, str(payload.npz_file_url), settings)
     try:
         submitted = await submit_training_job(client, settings, source, payload)

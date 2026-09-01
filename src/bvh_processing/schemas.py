@@ -89,7 +89,7 @@ class TrainBvhRequest(BaseModel):
         strict=True,
         ge=1,
         le=2,
-        description="回传类型：1 MP4 仿真视频，2 ONNX 模型",
+        description="回传类型：1 MP4 仿真视频和 ONNX 模型，2 ONNX 模型",
     )
     gpu: int = Field(
         default=0,

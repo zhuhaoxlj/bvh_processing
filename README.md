@@ -13,7 +13,21 @@
 
 ```bash
 uv sync
-uv run uvicorn bvh_processing.main:app \
+uv run bvh-processing
+```
+
+训练接口默认以 Mock 模式启动，不下载 NPZ 或占用 GPU。需要调用真实 GPU
+Training Control 服务时使用：
+
+```bash
+uv run bvh-processing --mock 0
+```
+
+也可以显式指定监听地址和端口：
+
+```bash
+uv run bvh-processing \
+  --mock 0 \
   --host 0.0.0.0 \
   --port 9001
 ```
@@ -142,12 +156,9 @@ curl -X POST \
 
 ### `POST /api/v1/bvh/train`
 
-服务下载 NPZ 后先执行完整安全与结构校验，然后使用独立的 Isaac Lab Python
-环境启动 BeyondMimic 训练。Whole Body Tracking 源码及 G1 的 URDF、MuJoCo XML
-和网格资源已经内置在
-`src/bvh_processing/vendor/whole_body_tracking`，会随 Python 包一起部署。FastAPI
-运行环境本身仍不安装 Isaac Sim、Isaac Lab 或 CUDA 训练依赖；服务器需要提供安装
-好这些依赖的独立 Python 环境。
+服务默认运行在 Mock 模式：不下载 `npzFileUrl`，直接通过 `callbackUrl`
+回调内置演示产物。使用 `--mock 0` 启动后切换到真实模式，由服务下载 NPZ，
+上传到 GPU Training Control，选择编号最小的空闲 GPU 并创建远端训练任务。
 
 请求：
 
@@ -173,50 +184,27 @@ curl -X POST \
 - `robotType`：当前只支持 `1`，即 Unitree G1。
 - `algorithmType`：当前只支持 `1`，即 BeyondMimic。
 - `domainRandomization`：当前只支持 `2`，对应训练项目内置随机化配置。
-- `returnType`：`1` 用训练 ONNX 生成并回传 MP4，`2` 回传 ONNX。
+- `returnType`：`1` 回传 MP4 和 ONNX，`2` 仅回传 ONNX。
 - `gpu`：可选，物理 GPU 编号，默认 `0`。
 - `numEnvs`：可选，Isaac Lab 并行环境数，默认 `7168`。
 - `maxIterations`：可选，最大训练迭代数，默认 `100000`。
 - `seed`：可选，随机种子，默认 `42`。
 - `npzFileUrl`：重定向 NPZ 文件的 MinIO 下载地址。
 
-NPZ 必须包含 `fps`、`joint_pos`、`joint_vel`、`body_pos_w`、
-`body_quat_w`、`body_lin_vel_w` 和 `body_ang_vel_w`。当前 G1 模型要求 29 个
-关节和 30 个 body；所有动作数组帧数必须一致，数值必须有限，四元数必须归一化。
-校验失败时任务不会占用 GPU，并通过 `callbackUrl` 返回失败结果。
+Mock 模式下，`returnType=1` 使用同一个 `file` 字段回调
+`1a2_34000.mp4` 和 `1a2_34000.onnx` 两个附件；`returnType=2` 只回调
+`1a2_34000.onnx`。回调格式为 `multipart/form-data`。
 
-训练进程使用固定参数数组启动 `scripts/rsl_rl/train.py`，不会执行请求提供的 shell
-命令。训练成功后选择本任务最新的 `model_*.onnx`。`returnType=1` 会继续调用
-`scripts/mujoco_sim2sim.py`，使用 EGL 无窗口录制一个完整动作。回调使用
-`multipart/form-data` 上传 `file`；MP4 类型为 `video/mp4`，ONNX 类型为
-`application/octet-stream`。
-
-仓库默认从 `src/bvh_processing/vendor/whole_body_tracking` 加载训练项目，安装为
-wheel 后也会从安装包内定位，无需在服务器额外克隆源码。`UPSTREAM_COMMIT` 记录
-当前内置版本。部署时只需要配置 Isaac Lab Python；仅当需要改用外部训练源码时，
-才覆盖 `BVH_WBT_PROJECT_ROOT`：
+真实模式需要配置 GPU 控制服务：
 
 ```dotenv
-BVH_WBT_PYTHON=/opt/isaaclab/bin/python
-# BVH_WBT_PROJECT_ROOT=/other/whole_body_tracking
-BVH_TRAIN_WORKSPACE_ROOT=/var/tmp/bvh-training
-BVH_TRAIN_MAX_CONCURRENCY=1
-BVH_TRAIN_TIMEOUT_SECONDS=604800
-BVH_RENDER_TIMEOUT_SECONDS=1800
+BVH_GPU_CONTROL_API_URL=https://gpu-control.example.com
+BVH_GPU_CONTROL_API_TOKEN=<token>
+BVH_GPU_CONTROL_TIMEOUT_SECONDS=60
 ```
 
-训练源码随仓库部署不等于把 Isaac Sim 打进 FastAPI 的普通虚拟环境。服务器镜像
-仍需具备 NVIDIA 驱动、CUDA、Isaac Sim、Isaac Lab、RSL-RL、ONNX Runtime、
-MuJoCo 和视频编码依赖，并让 `BVH_WBT_PYTHON` 指向该环境。
-
-当上述 Isaac Lab 环境未配置完整时，接口自动使用内置演示产物降级：
-`returnType=1` 回传预先使用 ONNX MuJoCo 工具渲染的 `1a2_34000.mp4`，
-`returnType=2` 回传固定的 `1a2_34000.onnx`。该降级只处理环境未配置；已进入
-真实训练或渲染流程后的执行错误仍按失败结果回调，不会伪装成训练成功。
-
-当前并发限制是单个 API 进程内的信号量。生产环境若启动多个 Uvicorn worker，
-每个 worker 都会有独立限制；正式部署应改为独立 GPU worker 和持久任务队列，
-由队列按 GPU 串行分配任务。
+真实模式创建任务成功后，接口返回 GPU 控制服务的任务 ID；没有空闲 GPU 时返回
+HTTP 409。
 
 ## 提交多文件合并任务
 
