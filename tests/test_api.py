@@ -6,12 +6,13 @@ from uuid import UUID
 
 import pytest
 import respx
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import Response
 
+from bvh_processing.config import Settings, get_settings
 from bvh_processing.main import create_app
 from bvh_processing.retargeting.exporter import RetargetArtifacts
-from bvh_processing.training.service import TrainingArtifact
 
 SOURCE_URL = "https://minio.example.com/motions/walk.bvh"
 CALLBACK_URL = "https://backend.example.com/callbacks/bvh"
@@ -20,8 +21,8 @@ RETARGET_NPZ = b"tracking-npz-content"
 RETARGET_JSON = b'{"robot":"unitree_g1","frames":[]}'
 TRAIN_NPZ_URL = "https://minio.example.com/motions/walk_g1_tracking.npz"
 TRAIN_NPZ = b"retargeted-npz-content"
-TRAIN_MP4 = b"generated-mp4-content"
-TRAIN_ONNX = b"generated-onnx-content"
+GPU_CONTROL_URL = "https://gpu.example.com"
+GPU_TOKEN = "test-gpu-token"
 BVH_CONTENT = b"""HIERARCHY
 ROOT Hips
 {
@@ -256,71 +257,155 @@ def test_retarget_rejects_invalid_robot_type() -> None:
     assert response.json()["success"] is False
 
 
-@pytest.mark.parametrize(
-    ("return_type", "content", "filename", "content_type"),
-    [
-        (1, TRAIN_MP4, "walk_g1_tracking_trained.mp4", "video/mp4"),
-        (
-            2,
-            TRAIN_ONNX,
-            "walk_g1_tracking_trained.onnx",
-            "application/octet-stream",
-        ),
-    ],
-)
-def test_train_accepts_task_and_callbacks_selected_artifact(
-    return_type: int,
-    content: bytes,
-    filename: str,
-    content_type: str,
-) -> None:
-    payload = {
+def _train_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
         "actionId": "training-42",
         "robotType": 1,
         "algorithmType": 1,
         "npzFileUrl": TRAIN_NPZ_URL,
         "domainRandomization": 2,
-        "returnType": return_type,
+        "returnType": 2,
+        "numEnvs": 12288,
+        "maxIterations": 5000,
+        "seed": 7,
         "callbackUrl": CALLBACK_URL,
     }
-    artifact = TrainingArtifact(
-        content=BytesIO(content),
-        filename=filename,
-        content_type=content_type,
+    payload.update(overrides)
+    return payload
+
+
+def _create_training_test_app() -> FastAPI:
+    app = create_app()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None,
+        gpu_control_api_url=GPU_CONTROL_URL,
+        gpu_control_api_token=GPU_TOKEN,
     )
+    return app
 
-    with (
-        patch(
-            "bvh_processing.training.task.run_training_program",
-            return_value=artifact,
-        ) as train_program,
-        respx.mock,
-    ):
-        respx.get(TRAIN_NPZ_URL).mock(return_value=Response(200, content=TRAIN_NPZ))
-        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
 
-        with TestClient(create_app()) as client:
-            response = client.post("/api/v1/bvh/train", json=payload)
+def test_train_uploads_npz_selects_first_available_gpu_and_starts_job() -> None:
+    with respx.mock:
+        download = respx.get(TRAIN_NPZ_URL).mock(
+            return_value=Response(200, content=TRAIN_NPZ)
+        )
+        upload = respx.post(
+            f"{GPU_CONTROL_URL}/api/v1/artifacts/motions"
+        ).mock(
+            return_value=Response(201, json={"id": "motion_abc"})
+        )
+        gpu_query = respx.get(f"{GPU_CONTROL_URL}/api/v1/gpus/simple").mock(
+            return_value=Response(
+                200,
+                json={
+                    "gpus": [
+                        {"gpu": 3, "available": True},
+                        {"gpu": 0, "available": False},
+                        {"gpu": 1, "available": True},
+                    ]
+                },
+            )
+        )
+        create_job = respx.post(f"{GPU_CONTROL_URL}/api/v1/jobs").mock(
+            return_value=Response(202, json={"id": "job_abc"})
+        )
+
+        with TestClient(_create_training_test_app()) as client:
+            response = client.post(
+                "/api/v1/bvh/train",
+                json=_train_payload(),
+            )
 
     assert response.status_code == 200
-    assert response.json()["success"] is True
-    assert response.json()["message"] == "训练任务已接收"
-    UUID(response.json()["taskId"])
-    train_payload = train_program.call_args.args[1]
-    assert train_payload.robot_type == 1
-    assert train_payload.algorithm_type == 1
-    assert train_payload.domain_randomization == 2
-    assert train_payload.return_type == return_type
-    assert train_payload.gpu == 0
-    assert train_payload.num_envs == 7168
-    assert train_payload.max_iterations == 100000
-    assert train_payload.seed == 42
+    assert response.json() == {
+        "success": True,
+        "taskId": "job_abc",
+        "message": "训练任务已提交，使用 cuda:1",
+    }
+    assert len(download.calls) == 1
+    assert len(upload.calls) == 1
+    assert len(gpu_query.calls) == 1
+    assert len(create_job.calls) == 1
+    assert b'filename="walk_g1_tracking.npz"' in upload.calls[0].request.content
+    assert TRAIN_NPZ in upload.calls[0].request.content
+    assert upload.calls[0].request.headers["authorization"] == f"Bearer {GPU_TOKEN}"
+    assert json.loads(create_job.calls[0].request.content) == {
+        "artifact_id": "motion_abc",
+        "devices": ["cuda:1"],
+        "num_envs": 12288,
+        "max_iterations": 5000,
+        "seed": 7,
+    }
 
-    callback_body = callback.calls.last.request.content
-    assert b"training-42" in callback_body
-    assert f'filename="{filename}"'.encode() in callback_body
-    assert content_type.encode() in callback_body
-    assert content in callback_body
+
+def test_train_returns_capacity_full_when_no_gpu_is_available() -> None:
+    with respx.mock:
+        respx.get(TRAIN_NPZ_URL).mock(return_value=Response(200, content=TRAIN_NPZ))
+        respx.post(f"{GPU_CONTROL_URL}/api/v1/artifacts/motions").mock(
+            return_value=Response(201, json={"id": "motion_abc"})
+        )
+        respx.get(f"{GPU_CONTROL_URL}/api/v1/gpus/simple").mock(
+            return_value=Response(
+                200,
+                json={"gpus": [{"gpu": 0, "available": False}]},
+            )
+        )
+        create_job = respx.post(f"{GPU_CONTROL_URL}/api/v1/jobs").mock(
+            return_value=Response(202, json={"id": "unexpected"})
+        )
+
+        with TestClient(_create_training_test_app()) as client:
+            response = client.post(
+                "/api/v1/bvh/train",
+                json=_train_payload(),
+            )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "success": False,
+        "taskId": None,
+        "code": "gpu_capacity_full",
+        "message": "当前显卡训练任务已满",
+    }
+    assert len(create_job.calls) == 0
+
+
+def test_train_tries_next_gpu_when_first_gpu_is_claimed_concurrently() -> None:
+    with respx.mock:
+        respx.get(TRAIN_NPZ_URL).mock(return_value=Response(200, content=TRAIN_NPZ))
+        respx.post(f"{GPU_CONTROL_URL}/api/v1/artifacts/motions").mock(
+            return_value=Response(201, json={"id": "motion_abc"})
+        )
+        respx.get(f"{GPU_CONTROL_URL}/api/v1/gpus/simple").mock(
+            return_value=Response(
+                200,
+                json={
+                    "gpus": [
+                        {"gpu": 0, "available": True},
+                        {"gpu": 2, "available": True},
+                    ]
+                },
+            )
+        )
+        create_job = respx.post(f"{GPU_CONTROL_URL}/api/v1/jobs").mock(
+            side_effect=[
+                Response(409, json={"detail": "GPU is unavailable"}),
+                Response(202, json={"id": "job_second_gpu"}),
+            ]
+        )
+
+        with TestClient(_create_training_test_app()) as client:
+            response = client.post(
+                "/api/v1/bvh/train",
+                json=_train_payload(),
+            )
+
+    assert response.status_code == 200
+    assert response.json()["taskId"] == "job_second_gpu"
+    assert response.json()["message"] == "训练任务已提交，使用 cuda:2"
+    assert [
+        json.loads(call.request.content)["devices"] for call in create_job.calls
+    ] == [["cuda:0"], ["cuda:2"]]
 
 
 @pytest.mark.parametrize(

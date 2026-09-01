@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -13,6 +14,23 @@ class Settings(BaseSettings):
     minio_allowed_hosts: str = ""
     callback_allowed_hosts: str = ""
     callback_token: str = "action-callback-token"
+    gpu_control_api_url: str = Field(
+        default=(
+            "https://y7b4jaa2-x1b58667-6666.zj02restapi.gpufree.cn:8443"
+        ),
+        validation_alias=AliasChoices(
+            "GPU_CONTROL_API_URL",
+            "GPU_TRAINING_CONTROL_URL",
+        ),
+    )
+    gpu_control_api_token: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "GPU_CONTROL_API_TOKEN",
+            "GPU_TRAINING_CONTROL_TOKEN",
+        ),
+    )
+    gpu_control_timeout_seconds: float = 60.0
     train_timeout_seconds: float = 604800.0
     render_timeout_seconds: float = 1800.0
     train_max_concurrency: int = 1
@@ -32,6 +50,7 @@ class Settings(BaseSettings):
         env_prefix="BVH_",
         env_file=".env",
         extra="ignore",
+        populate_by_name=True,
     )
 
     @property

@@ -15,34 +15,19 @@ from bvh_processing.schemas import (
     TrainBvhRequest,
 )
 from bvh_processing.services.callback import validate_callback_url
+from bvh_processing.services.download import download_npz
 from bvh_processing.services.tasks import run_merge_task, run_processing_task
-from bvh_processing.training.task import run_train_task
+from bvh_processing.training.control import submit_training_job
 
 # ============================================================================
-# 接口总流程（所有提交接口都采用“接收即返回、后台异步执行”的模式）
+# 接口总流程
 #
-# 客户端
-#   │ POST 请求 + JSON 入参
-#   ▼
-# FastAPI 路由函数（本文件）
-#   ├─ Pydantic 校验请求体（schemas.py）
-#   ├─ validate_callback_url() 校验回调地址
-#   ├─ uuid4() 生成 taskId
-#   └─ background_tasks.add_task() 注册后台任务
-#          │
-#          ├─ /process  → run_processing_task()
-#          ├─ /merge    → run_merge_task()
-#          ├─ /retarget → run_retarget_task()
-#          └─ /train    → run_train_task()
-#                         │
-#                         ├─ 下载源文件
-#                         ├─ 执行对应算法/处理步骤
-#                         ├─ 通过 callbackUrl 回传进度或结果
-#                         └─ 释放临时文件和资源
+# /process、/merge、/retarget：校验请求后注册后台任务并立即返回，由后台任务
+# 下载源文件、执行处理、调用 callbackUrl 回传结果并释放资源。
 #
-# 路由函数不会等待上述耗时任务完成，而是立即返回：
-#   {"success": true, "taskId": "...", "message": "任务已接收"}
-# 因此 success=true 只表示任务已被服务接收，不代表最终处理成功。
+# /train：在请求内下载 NPZ、上传 GPU 控制服务、查询空闲 GPU 并创建远端
+# 训练任务；创建成功后返回远端 job ID，GPU 不足或远端调用失败则直接返回错误。
+# 远端训练进程本身异步运行，本服务不等待训练完成。
 # ============================================================================
 
 
@@ -181,45 +166,42 @@ async def retarget(
 # - seed：可选，训练随机种子，默认 42。
 # - callbackUrl：训练结果回调地址。
 #
-# 后台流程：
-#   下载 NPZ → 严格校验 G1 BeyondMimic 数组 → 调用内置 Whole Body Tracking
-#   训练 → 定位 ONNX → 按 returnType 回传 ONNX 或渲染 MP4
-#   → send_callback(file=训练产物)
+# 处理流程（提交前同步执行）：
+#   下载 NPZ → 上传 GPU Training Control → 查询空闲 GPU
+#   → 按物理编号选择第一张空闲卡 → 创建远端训练任务
 #
-# 返回：ProcessBvhResponse，表示任务是否已接收；训练产物通过回调上传。
+# 返回：ProcessBvhResponse。taskId 为 GPU 控制服务返回的训练任务 ID。
+# 如果所有 GPU 均不可用，则返回 409 和“当前显卡训练任务已满”。
 # ----------------------------------------------------------------------------
 @router.post(
     "/api/v1/bvh/train",
     response_model=ProcessBvhResponse,
     summary="提交机器人策略训练任务",
     description=(
-        "异步下载 MinIO 中的 G1 重定向 NPZ，严格校验后调用内置 Whole Body "
-        "Tracking 执行 BeyondMimic 训练。returnType=1 时通过 callbackUrl 上传 "
-        "MP4；returnType=2 时上传 ONNX。"
+        "同步下载 MinIO 中的 G1 重定向 NPZ，上传到 GPU Training Control，"
+        "自动选择编号最小的空闲 GPU 并创建 BeyondMimic 训练任务。训练由远端"
+        "服务异步执行；taskId 为远端训练任务 ID。"
     ),
     tags=["bvh"],
 )
 async def train(
     payload: TrainBvhRequest,
     request: Request,
-    background_tasks: BackgroundTasks,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> ProcessBvhResponse:
     validate_callback_url(str(payload.callback_url), settings.allowed_callback_hosts)
 
-    task_id = str(uuid4())
     client: httpx.AsyncClient = request.app.state.http_client
-    background_tasks.add_task(
-        run_train_task,
-        client,
-        settings,
-        task_id,
-        payload,
-    )
+    source = await download_npz(client, str(payload.npz_file_url), settings)
+    try:
+        submitted = await submit_training_job(client, settings, source, payload)
+    finally:
+        source.content.close()
+
     return ProcessBvhResponse(
         success=True,
-        taskId=task_id,
-        message="训练任务已接收",
+        taskId=submitted.job_id,
+        message=f"训练任务已提交，使用 cuda:{submitted.gpu}",
     )
 
 

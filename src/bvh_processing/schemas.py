@@ -111,8 +111,8 @@ class TrainBvhRequest(BaseModel):
         alias="maxIterations",
         strict=True,
         ge=1,
-        le=1000000,
-        description="BeyondMimic 最大训练迭代次数",
+        le=100000,
+        description="BeyondMimic 最大训练迭代次数（GPU 控制服务上限 100000）",
     )
     seed: int = Field(
         default=42,
