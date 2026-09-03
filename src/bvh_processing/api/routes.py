@@ -1,3 +1,4 @@
+import asyncio
 from typing import Annotated
 from uuid import uuid4
 
@@ -18,6 +19,10 @@ from bvh_processing.services.callback import validate_callback_url
 from bvh_processing.services.download import download_npz
 from bvh_processing.services.tasks import run_merge_task, run_processing_task
 from bvh_processing.training.control import submit_training_job
+from bvh_processing.training.metrics import (
+    run_metrics_polling,
+    send_initial_loss_callback,
+)
 from bvh_processing.training.mock import run_mock_train_task
 
 # ============================================================================
@@ -198,6 +203,10 @@ async def train(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> ProcessBvhResponse:
     validate_callback_url(str(payload.callback_url), settings.allowed_callback_hosts)
+    if payload.loss_callback_url is not None:
+        validate_callback_url(
+            str(payload.loss_callback_url), settings.allowed_callback_hosts
+        )
 
     client: httpx.AsyncClient = request.app.state.http_client
     if settings.mock:
@@ -220,6 +229,21 @@ async def train(
         submitted = await submit_training_job(client, settings, source, payload)
     finally:
         source.content.close()
+
+    await send_initial_loss_callback(
+        client,
+        settings,
+        submitted.job_id,
+        payload,
+    )
+    asyncio.create_task(
+        run_metrics_polling(
+            client,
+            settings,
+            submitted.job_id,
+            payload,
+        )
+    )
 
     return ProcessBvhResponse(
         success=True,

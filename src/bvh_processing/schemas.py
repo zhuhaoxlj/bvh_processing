@@ -125,6 +125,11 @@ class TrainBvhRequest(BaseModel):
         alias="callbackUrl",
         description="训练结果文件的回调地址",
     )
+    loss_callback_url: AnyHttpUrl | None = Field(
+        default=None,
+        alias="lossCallbackUrl",
+        description="训练期间 GPU metrics JSON 的回调地址",
+    )
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
