@@ -3,7 +3,7 @@ import sys
 from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import numpy as np
 import pytest
@@ -12,6 +12,11 @@ from bvh_processing.config import Settings
 from bvh_processing.errors import BvhServiceError
 from bvh_processing.schemas import TrainBvhRequest
 from bvh_processing.services.download import DownloadedBvh
+from bvh_processing.training.metrics import (
+    LOSS_INTERVAL_SECONDS,
+    send_initial_loss_callback,
+)
+from bvh_processing.training.mock import run_mock_train_task
 from bvh_processing.training.service import (
     _run_process,
     _training_command,
@@ -56,6 +61,66 @@ def _payload(**overrides: object) -> TrainBvhRequest:
     }
     values.update(overrides)
     return TrainBvhRequest.model_validate(values)
+
+
+def test_initial_loss_callback_queries_without_waiting() -> None:
+    payload = _payload(lossCallbackUrl="https://backend.example.com/loss-callback")
+    settings = Settings(_env_file=None)
+    fetch = AsyncMock(return_value=True)
+    sleep = AsyncMock()
+
+    with (
+        patch("bvh_processing.training.metrics._fetch_and_callback", fetch),
+        patch("bvh_processing.training.metrics.asyncio.sleep", sleep),
+    ):
+        asyncio.run(
+            send_initial_loss_callback(
+                AsyncMock(),
+                settings,
+                "job-immediate",
+                payload,
+            )
+        )
+
+    fetch.assert_awaited_once()
+    sleep.assert_not_awaited()
+
+
+def test_mock_queries_loss_before_demo_delay() -> None:
+    payload = _payload(lossCallbackUrl="https://backend.example.com/loss-callback")
+    settings = Settings(_env_file=None)
+    events: list[str] = []
+
+    async def record_loss(*args: object, **kwargs: object) -> None:
+        events.append("loss")
+
+    async def record_sleep(delay: float) -> None:
+        assert delay == 10.0
+        events.append("sleep")
+
+    async def record_result(*args: object, **kwargs: object) -> None:
+        events.append("result")
+
+    with (
+        patch(
+            "bvh_processing.training.mock._start_cloud_loss_callbacks",
+            side_effect=record_loss,
+        ),
+        patch("bvh_processing.training.mock.asyncio.sleep", side_effect=record_sleep),
+        patch("bvh_processing.training.mock.send_callback", side_effect=record_result),
+        patch("bvh_processing.training.mock._mock_files", return_value=()),
+    ):
+        asyncio.run(
+            run_mock_train_task(
+                AsyncMock(),
+                settings,
+                "mock-immediate",
+                payload,
+            )
+        )
+
+    assert events == ["loss", "sleep", "result"]
+    assert LOSS_INTERVAL_SECONDS == 10 * 60
 
 
 def test_default_settings_use_embedded_training_project() -> None:

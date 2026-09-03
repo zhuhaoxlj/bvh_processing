@@ -176,11 +176,13 @@ async def retarget(
 # Mock 模式（默认）：
 #   returnType=1 → 通过 callbackUrl 回调内置 MP4 和 ONNX
 #   returnType=2 → 通过 callbackUrl 回调内置 ONNX
-#   lossCallbackUrl → 获取云端最近一次训练任务的真实 loss 并持续回调
+#   lossCallbackUrl → 立即获取云端最近一次训练任务的真实 loss 并回调，
+#   此后每 10 分钟重新查询并回调一次；演示产物仍在 10 秒后回调。
 #
 # 真实模式（启动时指定 --mock 0）：（TODO 任务完成或者提前结束的按钮触发回调）
 #   下载 NPZ → 上传 GPU Training Control → 查询空闲 GPU
 #   → 按物理编号选择第一张空闲卡 → 创建远端训练任务
+#   → 立即查询并回调 loss → 此后每 10 分钟重新查询并回调一次
 #
 # 返回：ProcessBvhResponse。Mock 模式的 taskId 为本地任务 ID；真实模式的
 # taskId 为 GPU 控制服务返回的训练任务 ID。

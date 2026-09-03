@@ -80,11 +80,11 @@ async def run_mock_train_task(
     task_id: str,
     payload: TrainBvhRequest,
 ) -> None:
-    """等待十秒后回调云端真实 loss 和本地演示产物。"""
+    """立即回调云端真实 loss，十秒后回调本地演示产物。"""
 
     try:
-        await asyncio.sleep(10.0)
         await _start_cloud_loss_callbacks(client, settings, task_id, payload)
+        await asyncio.sleep(10.0)
         with ExitStack() as stack:
             await send_callback(
                 client,

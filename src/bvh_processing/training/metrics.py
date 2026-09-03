@@ -13,7 +13,6 @@ from bvh_processing.schemas import TrainBvhRequest
 
 logger = logging.getLogger(__name__)
 
-INITIAL_LOSS_DELAY_SECONDS = 10.0
 LOSS_INTERVAL_SECONDS = 600.0
 LOSS_MAX_POINTS = 500
 
@@ -105,9 +104,8 @@ async def send_initial_loss_callback(
     job_id: str,
     payload: TrainBvhRequest,
 ) -> None:
-    """训练提交十秒后查询并回调一次；数据暂时不可用时不阻断训练。"""
+    """立即查询并回调一次；数据暂时不可用时不阻断训练。"""
 
-    await asyncio.sleep(INITIAL_LOSS_DELAY_SECONDS)
     if payload.loss_callback_url is None:
         return
 

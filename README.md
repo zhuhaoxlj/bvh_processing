@@ -158,7 +158,9 @@ curl -X POST \
 
 服务默认运行在 Mock 模式：不下载 `npzFileUrl`，直接通过 `callbackUrl`
 回调内置演示产物；提供 `lossCallbackUrl` 时，会查询 GPU Training Control
-最近创建的训练任务，并将该任务的真实 loss 数据回调给业务后端。使用
+最近创建的训练任务，并在任务接收后立即将该任务的真实 loss 数据回调给业务
+后端，此后每 10 分钟重新查询并回调一次。Mock 演示产物仍在 10 秒后通过
+`callbackUrl` 返回。使用
 `--mock 0` 启动后切换到真实模式，由服务下载 NPZ，上传到 GPU Training
 Control，选择编号最小的空闲 GPU 并创建远端训练任务。
 
