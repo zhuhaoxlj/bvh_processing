@@ -18,11 +18,40 @@ LOSS_INTERVAL_SECONDS = 600.0
 LOSS_MAX_POINTS = 500
 
 
+def _authorization_headers(settings: Settings) -> dict[str, str]:
+    if not settings.gpu_control_api_token:
+        raise ValueError("GPU 控制服务 Token 未配置")
+    return {"Authorization": f"Bearer {settings.gpu_control_api_token}"}
+
+
 def _api_url(settings: Settings, job_id: str) -> str:
     return (
         f"{settings.gpu_control_api_url.rstrip('/')}/api/v1/jobs/"
         f"{job_id}/loss?max_points={LOSS_MAX_POINTS}"
     )
+
+
+async def latest_training_job_id(
+    client: httpx.AsyncClient,
+    settings: Settings,
+) -> str:
+    """返回 GPU 控制服务最近创建的训练任务 ID。"""
+
+    response = await client.get(
+        f"{settings.gpu_control_api_url.rstrip('/')}/api/v1/jobs",
+        headers=_authorization_headers(settings),
+        timeout=settings.gpu_control_timeout_seconds,
+    )
+    response.raise_for_status()
+    body: Any = response.json()
+    jobs = body.get("jobs") if isinstance(body, dict) else None
+    if not isinstance(jobs, list):
+        raise TypeError("GPU 控制服务返回了无效的训练任务列表")
+    for job in jobs:
+        job_id = job.get("id") if isinstance(job, dict) else None
+        if isinstance(job_id, str) and job_id:
+            return job_id
+    raise ValueError("GPU 控制服务暂无可用于 Mock loss 的训练任务")
 
 
 async def _fetch_and_callback(
@@ -39,7 +68,7 @@ async def _fetch_and_callback(
     action_id = payload.action_id or f"training-{job_id}"
     response = await client.get(
         _api_url(settings, job_id),
-        headers={"Authorization": f"Bearer {settings.gpu_control_api_token}"},
+        headers=_authorization_headers(settings),
         timeout=120.0,
     )
     response.raise_for_status()

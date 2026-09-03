@@ -176,6 +176,7 @@ async def retarget(
 # Mock 模式（默认）：
 #   returnType=1 → 通过 callbackUrl 回调内置 MP4 和 ONNX
 #   returnType=2 → 通过 callbackUrl 回调内置 ONNX
+#   lossCallbackUrl → 获取云端最近一次训练任务的真实 loss 并持续回调
 #
 # 真实模式（启动时指定 --mock 0）：（TODO 任务完成或者提前结束的按钮触发回调）
 #   下载 NPZ → 上传 GPU Training Control → 查询空闲 GPU
@@ -190,7 +191,8 @@ async def retarget(
     summary="提交机器人策略训练任务",
     description=(
         "默认使用 Mock 模式，returnType=1 回调内置 MP4 和 ONNX，"
-        "returnType=2 仅回调内置 ONNX。使用 --mock 0 启动时，下载 MinIO "
+        "returnType=2 仅回调内置 ONNX；提供 lossCallbackUrl 时使用 GPU "
+        "Control 最近一次训练任务的真实 loss。使用 --mock 0 启动时，下载 MinIO "
         "中的 NPZ，上传到 GPU Training Control，自动选择空闲 GPU 并创建"
         "远端 BeyondMimic 训练任务。"
     ),

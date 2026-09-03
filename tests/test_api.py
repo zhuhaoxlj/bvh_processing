@@ -16,6 +16,7 @@ from bvh_processing.retargeting.exporter import RetargetArtifacts
 
 SOURCE_URL = "https://minio.example.com/motions/walk.bvh"
 CALLBACK_URL = "https://backend.example.com/callbacks/bvh"
+LOSS_CALLBACK_URL = "https://backend.example.com/callbacks/training-loss"
 PROGRESS_CALLBACK_URL = "https://backend.example.com/progress-callbacks/bvh"
 RETARGET_NPZ = b"tracking-npz-content"
 RETARGET_JSON = b'{"robot":"unitree_g1","frames":[]}'
@@ -300,20 +301,44 @@ def test_train_mock_callbacks_demo_artifacts_without_downloading_npz(
     app.dependency_overrides[get_settings] = lambda: Settings(
         _env_file=None,
         mock=True,
+        gpu_control_api_url=GPU_CONTROL_URL,
+        gpu_control_api_token=GPU_TOKEN,
     )
+    cloud_loss = {
+        "job_id": "job_cloud_latest",
+        "losses": {"value_function": [{"step": 12, "value": 0.081}]},
+    }
 
     with respx.mock:
         callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+        jobs = respx.get(f"{GPU_CONTROL_URL}/api/v1/jobs").mock(
+            return_value=Response(200, json={"jobs": [{"id": "job_cloud_latest"}]})
+        )
+        loss = respx.get(
+            f"{GPU_CONTROL_URL}/api/v1/jobs/job_cloud_latest/loss?max_points=500"
+        ).mock(return_value=Response(200, json=cloud_loss))
+        loss_callback = respx.post(LOSS_CALLBACK_URL).mock(return_value=Response(204))
         with TestClient(app) as client:
             response = client.post(
                 "/api/v1/bvh/train",
-                json=_train_payload(returnType=return_type),
+                json=_train_payload(
+                    returnType=return_type,
+                    lossCallbackUrl=LOSS_CALLBACK_URL,
+                ),
             )
 
     assert response.status_code == 200
     assert response.json()["success"] is True
     assert response.json()["message"] == "Mock 训练任务已接收"
     UUID(response.json()["taskId"])
+    assert len(jobs.calls) == 1
+    assert jobs.calls[0].request.headers["authorization"] == f"Bearer {GPU_TOKEN}"
+    assert len(loss.calls) == 1
+    assert len(loss_callback.calls) == 1
+    assert json.loads(loss_callback.calls[0].request.content) == {
+        "actionId": "training-42",
+        "data": cloud_loss,
+    }
     assert len(callback.calls) == 1
 
     callback_body = callback.calls[0].request.content
@@ -330,9 +355,7 @@ def test_train_uploads_npz_selects_first_available_gpu_and_starts_job() -> None:
         download = respx.get(TRAIN_NPZ_URL).mock(
             return_value=Response(200, content=TRAIN_NPZ)
         )
-        upload = respx.post(
-            f"{GPU_CONTROL_URL}/api/v1/artifacts/motions"
-        ).mock(
+        upload = respx.post(f"{GPU_CONTROL_URL}/api/v1/artifacts/motions").mock(
             return_value=Response(201, json={"id": "motion_abc"})
         )
         gpu_query = respx.get(f"{GPU_CONTROL_URL}/api/v1/gpus/simple").mock(
