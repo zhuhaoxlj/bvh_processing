@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 _DEMO_ROOT = Path(__file__).resolve().parents[1] / "assets" / "policy_demo"
 _DEMO_MP4 = _DEMO_ROOT / "1a2_34000.mp4"
-_DEMO_ONNX = _DEMO_ROOT / "1a2_34000.onnx"
+_DEMO_ONNX = _DEMO_ROOT / "nytwm_70500.onnx"
 
 
 def _mock_files(payload: TrainBvhRequest, stack: ExitStack) -> tuple[CallbackFile, ...]:

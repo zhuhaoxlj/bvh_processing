@@ -22,7 +22,7 @@ from bvh_processing.training.validation import validate_training_npz
 
 _SPOOL_MEMORY_LIMIT = 8 * 1024 * 1024
 _DEMO_POLICY_DIRECTORY = Path(__file__).resolve().parents[1] / "assets" / "policy_demo"
-_DEMO_POLICY_PATH = _DEMO_POLICY_DIRECTORY / "1a2_34000.onnx"
+_DEMO_POLICY_PATH = _DEMO_POLICY_DIRECTORY / "nytwm_70500.onnx"
 _DEMO_VIDEO_PATH = _DEMO_POLICY_DIRECTORY / "1a2_34000.mp4"
 _SEMAPHORE_LOOP: asyncio.AbstractEventLoop | None = None
 _TRAINING_SEMAPHORE: asyncio.Semaphore | None = None

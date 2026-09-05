@@ -322,8 +322,8 @@ def _create_training_test_app() -> FastAPI:
 @pytest.mark.parametrize(
     ("return_type", "expected_filenames"),
     [
-        (1, ("1a2_34000.mp4", "1a2_34000.onnx")),
-        (2, ("1a2_34000.onnx",)),
+        (1, ("1a2_34000.mp4", "nytwm_70500.onnx")),
+        (2, ("nytwm_70500.onnx",)),
     ],
 )
 def test_train_mock_callbacks_demo_artifacts_without_downloading_npz(
@@ -379,7 +379,7 @@ def test_train_mock_callbacks_demo_artifacts_without_downloading_npz(
     for filename in expected_filenames:
         assert f'filename="{filename}"'.encode() in callback_body
     assert (b'filename="1a2_34000.mp4"' in callback_body) is (return_type == 1)
-    assert b'filename="1a2_34000.onnx"' in callback_body
+    assert b'filename="nytwm_70500.onnx"' in callback_body
     assert "Mock 训练成功".encode() in callback_body
 
 
