@@ -123,6 +123,39 @@ def _request_body() -> dict[str, object]:
     }
 
 
+def _merge_request_body(
+    *,
+    first_duration: float = 0.05,
+    second_duration: float = 0.05,
+    gap: float = 0.1,
+) -> dict[str, object]:
+    return {
+        "actionId": "action-merge-42",
+        "timelineOffsetSec": 0,
+        "segments": [
+            {
+                "segmentId": "segment-1",
+                "actionId": 101,
+                "actionUrl": MERGE_SOURCE_URL_1,
+                "sourceInSec": 0,
+                "sourceOutSec": 0.05,
+                "outputDurationSec": first_duration,
+                "gapAfterSec": gap,
+            },
+            {
+                "segmentId": "segment-2",
+                "actionId": 102,
+                "actionUrl": MERGE_SOURCE_URL_2,
+                "sourceInSec": 0,
+                "sourceOutSec": 0.05,
+                "outputDurationSec": second_duration,
+                "gapAfterSec": 0,
+            },
+        ],
+        "callbackUrl": CALLBACK_URL,
+    }
+
+
 def test_process_accepts_task_and_callbacks_with_file() -> None:
     app = create_app()
     with respx.mock:
@@ -573,13 +606,7 @@ def test_process_rejects_callback_token() -> None:
 
 
 def test_merge_accepts_task_and_callbacks_with_merged_file() -> None:
-    payload = {
-        "actionId": "action-merge-42",
-        "fileUrls": [MERGE_SOURCE_URL_1, MERGE_SOURCE_URL_2],
-        "intervalsSeconds": [0.1],
-        "bvhMotionDuration": [0.05, 0.05],
-        "callbackUrl": CALLBACK_URL,
-    }
+    payload = _merge_request_body()
     with respx.mock:
         respx.get(MERGE_SOURCE_URL_1).mock(
             return_value=Response(200, content=MERGE_BVH_1)
@@ -607,13 +634,7 @@ def test_merge_accepts_task_and_callbacks_with_merged_file() -> None:
 
 
 def test_merge_normalizes_all_files_to_lowest_frame_rate() -> None:
-    payload = {
-        "actionId": "action-merge-fps",
-        "fileUrls": [MERGE_SOURCE_URL_1, MERGE_SOURCE_URL_2],
-        "intervalsSeconds": [0],
-        "bvhMotionDuration": [0.1, 0.05],
-        "callbackUrl": CALLBACK_URL,
-    }
+    payload = _merge_request_body(first_duration=0.1, gap=0)
     with respx.mock:
         respx.get(MERGE_SOURCE_URL_1).mock(
             return_value=Response(200, content=MERGE_BVH_HIGH_FPS)
@@ -632,14 +653,44 @@ def test_merge_normalizes_all_files_to_lowest_frame_rate() -> None:
     assert b"Frame Time: 0.05" in callback_body
 
 
-def test_merge_rejects_wrong_interval_count() -> None:
+def test_merge_accepts_single_segment_with_dance_id_and_trims_frames() -> None:
     payload = {
-        "actionId": "action-merge-42",
-        "fileUrls": [MERGE_SOURCE_URL_1, MERGE_SOURCE_URL_2],
-        "intervalsSeconds": [],
-        "bvhMotionDuration": [3.21, 10.73],
+        "danceId": "39",
+        "timelineOffsetSec": 0,
+        "segments": [
+            {
+                "segmentId": "segment-only",
+                "actionId": 101,
+                "actionUrl": MERGE_SOURCE_URL_1,
+                "sourceInSec": 0.025,
+                "sourceOutSec": 0.075,
+                "outputDurationSec": 0.05,
+                "gapAfterSec": 0,
+            }
+        ],
         "callbackUrl": CALLBACK_URL,
     }
+    with respx.mock:
+        source = respx.get(MERGE_SOURCE_URL_1).mock(
+            return_value=Response(200, content=MERGE_BVH_HIGH_FPS)
+        )
+        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+
+        with TestClient(create_app()) as client:
+            response = client.post("/api/v1/bvh/merge", json=payload)
+
+    assert response.status_code == 200
+    assert len(source.calls) == 1
+    callback_body = callback.calls.last.request.content
+    assert b'\r\n\r\n39\r\n' in callback_body
+    assert b"Frames: 3" in callback_body
+    assert b"1 0 0 0 0 0 0 0 0 0 0 0" in callback_body
+    assert b"3 0 0 0 0 0 0 0 0 0 0 0" in callback_body
+
+
+def test_merge_rejects_empty_segments() -> None:
+    payload = _merge_request_body()
+    payload["segments"] = []
 
     with TestClient(create_app()) as client:
         response = client.post("/api/v1/bvh/merge", json=payload)
@@ -648,14 +699,10 @@ def test_merge_rejects_wrong_interval_count() -> None:
     assert response.json()["success"] is False
 
 
-def test_merge_rejects_wrong_motion_duration_count() -> None:
-    payload = {
-        "actionId": "action-merge-42",
-        "fileUrls": [MERGE_SOURCE_URL_1, MERGE_SOURCE_URL_2],
-        "intervalsSeconds": [0.1],
-        "bvhMotionDuration": [],
-        "callbackUrl": CALLBACK_URL,
-    }
+def test_merge_rejects_invalid_source_range() -> None:
+    payload = _merge_request_body()
+    payload["segments"][0]["sourceInSec"] = 0.05
+    payload["segments"][0]["sourceOutSec"] = 0.05
 
     with TestClient(create_app()) as client:
         response = client.post("/api/v1/bvh/merge", json=payload)
@@ -666,13 +713,7 @@ def test_merge_rejects_wrong_motion_duration_count() -> None:
 
 def test_merge_reports_incompatible_skeleton() -> None:
     incompatible = MERGE_BVH_2.replace(b"ROOT Hips", b"ROOT Pelvis")
-    payload = {
-        "actionId": "action-merge-42",
-        "fileUrls": [MERGE_SOURCE_URL_1, MERGE_SOURCE_URL_2],
-        "intervalsSeconds": [0],
-        "bvhMotionDuration": [3.21, 10.73],
-        "callbackUrl": CALLBACK_URL,
-    }
+    payload = _merge_request_body(gap=0)
     with respx.mock:
         respx.get(MERGE_SOURCE_URL_1).mock(
             return_value=Response(200, content=MERGE_BVH_1)

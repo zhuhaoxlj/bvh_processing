@@ -218,27 +218,46 @@ HTTP 409。
 
 ```json
 {
-  "actionId": "action-merge-42",
-  "fileUrls": [
-    "https://minio.example.com/bucket/walk.bvh",
-    "https://minio.example.com/bucket/idle.bvh",
-    "https://minio.example.com/bucket/run.bvh"
+  "actionId": "merge-42",
+  "timelineOffsetSec": 0,
+  "segments": [
+    {
+      "segmentId": "segment-1",
+      "actionId": 101,
+      "actionUrl": "https://minio.example.com/bucket/wave.bvh",
+      "sourceInSec": 0,
+      "sourceOutSec": 2.2,
+      "outputDurationSec": 2.0,
+      "gapAfterSec": 0.8
+    },
+    {
+      "segmentId": "segment-2",
+      "actionId": 205,
+      "actionUrl": "https://minio.example.com/bucket/step.bvh",
+      "sourceInSec": 0.5,
+      "sourceOutSec": null,
+      "outputDurationSec": 3.0,
+      "gapAfterSec": 0
+    }
   ],
-  "intervalsSeconds": [5, 1],
-  "bvhMotionDuration": [3.21, 10.73, 6.45],
   "callbackUrl": "https://backend.example.com/callbacks/bvh"
 }
 ```
 
 字段说明：
 
-- `fileUrls`：BVH 下载地址数组，按照需要合并的顺序传递，至少包含两个文件。
-- `intervalsSeconds`：相邻文件之间的间隔秒数。数量必须等于
-  `fileUrls` 数量减一；例如 `[5, 1]` 表示第 1、2 个文件间隔 5 秒，
-  第 2、3 个文件间隔 1 秒。
-- `bvhMotionDuration`：每个 BVH 文件经用户拖动修改后的动作时长，按照
-  `fileUrls` 的顺序逐一对应；数量必须与 `fileUrls` 数量一致，且每个值都不能为负数。
-- `actionId` 和 `callbackUrl` 的含义与单文件处理接口相同。
+- `segments`：按最终合并顺序排列的片段，至少包含一个。
+- `actionUrl`：该片段对应的源 BVH 下载地址；相同地址只下载一次。
+- `sourceInSec/sourceOutSec`：源 BVH 裁剪区间；`sourceOutSec=null`
+  表示文件末尾。边界按最近的已有帧裁剪，不生成插值姿态。
+- `outputDurationSec`：裁剪片段的目标时长；比裁剪后时长短则加速，
+  比裁剪后时长长则减速。
+- `gapAfterSec`：当前片段与下一片段的平滑过渡秒数，范围为 0～10；
+  最后一段的值不参与合并。
+- `segmentId/actionId`：分别用于标识时间轴片段和动作库资源。
+- `timelineOffsetSec`：首动作时间轴偏移，不写入输出 BVH。
+- `actionId` 或 `danceId` 至少提供一个；业务后端通常传入用于回调关联的
+  `actionId`。`callbackUrl` 是处理完成后的回调地址。
 
 任务接收后立即返回：
 
@@ -253,9 +272,11 @@ HTTP 409。
 任务在后台下载并解析全部文件。合并时有以下约束：
 
 - 文件必须是 UTF-8 编码的有效 BVH。
-- 所有文件必须具有相同的骨架层级、通道数量和 `Frame Time`。
-- 间隔秒数会根据 `Frame Time` 四舍五入换算成帧数。
-- 间隔帧复制前一个 BVH 的最后一帧，使角色在间隔期间保持上一姿势。
+- 各片段会先按 `sourceInSec/sourceOutSec` 裁剪已有帧，再统一到所有片段中的
+  最低帧率，最后按 `outputDurationSec` 变速。
+- 所有文件必须具有相同的骨架层级和关节顺序。
+- `gapAfterSec` 会根据统一后的 `Frame Time` 四舍五入换算成接缝过渡帧数。
+- 只有一个片段时也可处理，完成裁剪和变速后直接生成结果文件。
 
 处理成功后，服务向 `callbackUrl` 发送一次 `multipart/form-data` 回调：
 
@@ -275,12 +296,17 @@ curl -X POST \
   "http://127.0.0.1:9001/api/v1/bvh/merge" \
   -H "Content-Type: application/json" \
   -d '{
-    "actionId":"action-merge-42",
-    "fileUrls":[
-      "https://minio.example.com/bucket/walk.bvh",
-      "https://minio.example.com/bucket/run.bvh"
-    ],
-    "intervalsSeconds":[5],
+    "actionId":"merge-42",
+    "timelineOffsetSec":0,
+    "segments":[{
+      "segmentId":"segment-1",
+      "actionId":101,
+      "actionUrl":"https://minio.example.com/bucket/walk.bvh",
+      "sourceInSec":0,
+      "sourceOutSec":2.2,
+      "outputDurationSec":2,
+      "gapAfterSec":0
+    }],
     "callbackUrl":"https://backend.example.com/callbacks/bvh"
   }'
 ```

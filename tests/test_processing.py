@@ -12,6 +12,7 @@ from bvh_processing.services.processing import (
     optimize_bvh_loop,
     process_bvh,
     smooth_bvh,
+    trim_bvh,
 )
 from bvh_processing.services.transition import (
     Joint,
@@ -161,6 +162,15 @@ def test_process_bvh_rejects_unknown_option() -> None:
         process_bvh(source, [5])
 
     assert error.value.code == "invalid_handle_option"
+
+
+def test_trim_bvh_uses_nearest_existing_frames_without_interpolation() -> None:
+    source = _downloaded([[0, 0], [1, 10], [2, 20], [3, 30], [4, 40]])
+
+    result = trim_bvh(source, 0.04, 0.095)
+
+    assert _frames(result) == [[1, 10], [2, 20], [3, 30]]
+    result.content.close()
 
 
 def test_transition_discards_exporter_startup_ramp() -> None:

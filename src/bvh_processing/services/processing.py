@@ -310,6 +310,50 @@ def optimize_bvh_loop(downloaded: DownloadedBvh) -> DownloadedBvh:
     return downloaded
 
 
+def trim_bvh(
+    downloaded: DownloadedBvh,
+    source_in_seconds: float,
+    source_out_seconds: float | None,
+) -> DownloadedBvh:
+    """按最近的已有帧裁剪 BVH，不在裁剪边界生成插值姿态。"""
+    parsed = _parse_bvh(downloaded)
+    source_duration = (len(parsed.frames) - 1) * parsed.frame_time
+    end_seconds = source_duration if source_out_seconds is None else source_out_seconds
+    tolerance = parsed.frame_time / 2 + 1e-9
+
+    if source_in_seconds < 0:
+        raise _invalid_bvh("sourceInSec 不能为负数")
+    if end_seconds <= source_in_seconds:
+        raise _invalid_bvh("sourceOutSec 必须大于 sourceInSec")
+    if source_in_seconds > source_duration + tolerance:
+        raise _invalid_bvh(
+            f"{downloaded.source_filename} 的 sourceInSec 超出 BVH 时长"
+        )
+    if end_seconds > source_duration + tolerance:
+        raise _invalid_bvh(
+            f"{downloaded.source_filename} 的 sourceOutSec 超出 BVH 时长"
+        )
+
+    last_index = len(parsed.frames) - 1
+    start_index = min(
+        math.floor(source_in_seconds / parsed.frame_time + 0.5),
+        last_index,
+    )
+    end_index = min(
+        math.floor(end_seconds / parsed.frame_time + 0.5),
+        last_index,
+    )
+    if end_index < start_index:
+        raise _invalid_bvh("裁剪区间没有可用的 BVH 帧")
+
+    return _build_bvh(
+        parsed,
+        parsed.frames[start_index : end_index + 1],
+        parsed.frame_time_text,
+        downloaded.source_filename,
+    )
+
+
 def normalize_bvh_frame_rates(
     downloaded_files: list[DownloadedBvh],
 ) -> list[DownloadedBvh]:
@@ -359,22 +403,27 @@ def adjust_bvh_motion_durations(
 
             # BVH 的动作时长是首帧到末帧的时间跨度。
             source_duration = max(0.0, (len(parsed.frames) - 1) * parsed.frame_time)
-            if source_duration == 0.0 or target_duration == 0.0:
+            if target_duration == 0.0:
                 output_frames = [parsed.frames[0]]
             else:
                 output_frame_count = max(
                     2,
                     math.floor(target_duration / parsed.frame_time + 0.5) + 1,
                 )
-                output_frames = [
-                    parsed.frames[
-                        min(
-                            math.floor(index * source_duration / target_duration + 0.5),
-                            len(parsed.frames) - 1,
-                        )
+                if source_duration == 0.0:
+                    output_frames = [parsed.frames[0]] * output_frame_count
+                else:
+                    output_frames = [
+                        parsed.frames[
+                            min(
+                                math.floor(
+                                    index * source_duration / target_duration + 0.5
+                                ),
+                                len(parsed.frames) - 1,
+                            )
+                        ]
+                        for index in range(output_frame_count)
                     ]
-                    for index in range(output_frame_count)
-                ]
 
             adjusted_files.append(
                 _build_bvh(
@@ -396,11 +445,18 @@ def merge_bvh_files(
     intervals_seconds: list[float],
 ) -> DownloadedBvh:
     """使用动作对齐、旋转插值和脚部锁定过渡来合并多个 BVH。"""
-    if len(downloaded_files) < 2 or len(intervals_seconds) != len(downloaded_files) - 1:
+    if not downloaded_files or len(intervals_seconds) != len(downloaded_files) - 1:
         raise ValueError("BVH 文件与过渡时间数量不匹配")
 
     parsed_files = [_parse_bvh(downloaded) for downloaded in downloaded_files]
     first = parsed_files[0]
+    if len(parsed_files) == 1:
+        return _build_bvh(
+            first,
+            first.frames,
+            first.frame_time_text,
+            merged_filename(downloaded_files[0].source_filename),
+        )
     for parsed in parsed_files[1:]:
         if not math.isclose(
             parsed.frame_time, first.frame_time, rel_tol=1e-7, abs_tol=1e-9

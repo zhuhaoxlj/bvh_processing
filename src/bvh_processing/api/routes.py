@@ -260,22 +260,24 @@ async def train(
 # POST /api/v1/bvh/merge
 #
 # 入参：MergeBvhRequest（JSON）
-# - actionId：业务动作记录 ID。
-# - fileUrls：按合并顺序排列的 BVH 下载地址，至少两个。
-# - intervalsSeconds：相邻 BVH 之间的平滑过渡秒数，数量为文件数减一。
-# - bvhMotionDuration：每个 BVH 的目标动作时长，按 fileUrls 下标一一对应。
+# - actionId/danceId：任务回调关联 ID 或舞蹈 ID，至少提供一个。
+# - timelineOffsetSec：首动作时间轴偏移，仅用于编排，不写入 BVH。
+# - segments：按合并顺序排列的片段，至少一个；每段包含：
+#   segmentId、actionId、actionUrl、sourceInSec、sourceOutSec、
+#   outputDurationSec、gapAfterSec。
 # - callbackUrl：合并结果回调地址。
 #
 # 后台流程：
 #   run_merge_task()
-#     → download_bvh()：逐个下载并校验文件
+#     → download_bvh()：按 actionUrl 下载并复用相同源文件
+#     → trim_bvh()：将 sourceInSec/sourceOutSec 映射到最近的已有帧并裁剪，
+#       不在边界生成插值姿态
 #     → normalize_bvh_frame_rates()：统一到最低帧率
-#     → adjust_bvh_motion_durations()：按 bvhMotionDuration 重采样，
+#     → adjust_bvh_motion_durations()：按 outputDurationSec 重采样，
 #       目标时长更短则加速，目标时长更长则放慢
-#     → merge_bvh_files()：校验骨架拓扑和帧率，将 intervalsSeconds
-#       换算为各接缝的过渡帧数；对后一个动作执行根节点位置/朝向对齐，
-#       使用 Hermite 曲线插值根节点位移、缓动旋转插值关节姿态，
-#       并锁定支撑脚以降低过渡阶段的脚部滑动
+#     → merge_bvh_files()：将非末段 gapAfterSec 换算为接缝过渡帧数，
+#       对后一个动作执行根节点位置/朝向对齐，使用 Hermite 曲线插值根节点
+#       位移、缓动旋转插值关节姿态，并锁定支撑脚
 #     → send_callback(file=*_merged.bvh)：上传最终合并文件
 #
 # 返回：ProcessBvhResponse，表示合并任务是否已接收；最终 BVH 通过回调上传。
@@ -285,11 +287,11 @@ async def train(
     response_model=ProcessBvhResponse,
     summary="提交多个 BVH 合并任务",
     description=(
-        "按 fileUrls 的顺序异步合并多个 BVH。下载完成后先检测各文件帧率，"
-        "并将所有文件降采样到最低帧率，再按 bvhMotionDuration 调整动作速度；"
-        "intervalsSeconds 中的每个值表示对应两个动作之间的平滑过渡时长，"
-        "过渡阶段会执行根节点对齐、旋转插值和支撑脚锁定。"
-        "完成后通过 callbackUrl 上传合并文件。"
+        "按 segments 的顺序异步处理并合并 BVH 片段。每段先根据 "
+        "sourceInSec/sourceOutSec 裁剪已有帧，再统一帧率并按 "
+        "outputDurationSec 调整速度；非末段的 gapAfterSec 表示与下一动作的"
+        "平滑过渡时长。过渡阶段会执行根节点对齐、旋转插值和支撑脚锁定。"
+        "timelineOffsetSec 不写入输出 BVH。完成后通过 callbackUrl 上传文件。"
     ),
     tags=["bvh"],
 )

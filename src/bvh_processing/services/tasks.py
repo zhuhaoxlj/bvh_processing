@@ -18,6 +18,7 @@ from bvh_processing.services.processing import (
     normalize_bvh_frame_rates,
     process_bvh,
     processed_filename,
+    trim_bvh,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,11 @@ async def _send_failure_callback(
         await send_callback(
             client,
             callback_url=str(payload.callback_url),
-            action_id=getattr(payload, "action_id", None),
+            action_id=(
+                payload.callback_reference_id
+                if isinstance(payload, MergeBvhRequest)
+                else payload.action_id
+            ),
             success=False,
             message=_failure_message(error),
             callback_token=settings.callback_token,
@@ -134,32 +139,46 @@ async def run_merge_task(
     task_id: str,
     payload: MergeBvhRequest,
 ) -> None:
-    resources: list[DownloadedBvh] = []
+    resources_by_url: dict[str, DownloadedBvh] = {}
+    trimmed_resources: list[DownloadedBvh] = []
     normalized_resources: list[DownloadedBvh] = []
     adjusted_resources: list[DownloadedBvh] = []
     result: DownloadedBvh | None = None
     try:
-        for file_url in payload.file_urls:
-            resources.append(await download_bvh(client, str(file_url), settings))
-        # 降采样与合并是两个独立步骤，并在线程中执行以避免阻塞事件循环。
+        for segment in payload.segments:
+            action_url = str(segment.action_url)
+            resource = resources_by_url.get(action_url)
+            if resource is None:
+                resource = await download_bvh(client, action_url, settings)
+                resources_by_url[action_url] = resource
+            trimmed_resources.append(
+                await asyncio.to_thread(
+                    trim_bvh,
+                    resource,
+                    segment.source_in_seconds,
+                    segment.source_out_seconds,
+                )
+            )
+
+        # 先按源时间裁剪，再统一帧率，最后根据每段输出时长进行变速。
         normalized_resources = await asyncio.to_thread(
             normalize_bvh_frame_rates,
-            resources,
+            trimmed_resources,
         )
         adjusted_resources = await asyncio.to_thread(
             adjust_bvh_motion_durations,
             normalized_resources,
-            payload.bvh_motion_duration,
+            [segment.output_duration_seconds for segment in payload.segments],
         )
         result = await asyncio.to_thread(
             merge_bvh_files,
             adjusted_resources,
-            payload.intervals_seconds,
+            [segment.gap_after_seconds for segment in payload.segments[:-1]],
         )
         await send_callback(
             client,
             callback_url=str(payload.callback_url),
-            action_id=payload.action_id,
+            action_id=payload.callback_reference_id,
             success=True,
             message="BVH 合并成功",
             callback_token=settings.callback_token,
@@ -176,5 +195,7 @@ async def run_merge_task(
             resource.content.close()
         for resource in normalized_resources:
             resource.content.close()
-        for resource in resources:
+        for resource in trimmed_resources:
+            resource.content.close()
+        for resource in resources_by_url.values():
             resource.content.close()

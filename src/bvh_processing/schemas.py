@@ -142,24 +142,82 @@ class ProcessBvhResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class MergeBvhSegment(BaseModel):
+    segment_id: str = Field(
+        alias="segmentId",
+        min_length=1,
+        description="时间轴片段唯一 ID",
+    )
+    action_id: int = Field(
+        alias="actionId",
+        strict=True,
+        gt=0,
+        description="动作库资源 ID",
+    )
+    action_url: AnyHttpUrl = Field(
+        alias="actionUrl",
+        description="源 BVH 文件下载地址",
+    )
+    source_in_seconds: float = Field(
+        alias="sourceInSec",
+        ge=0,
+        description="片段在源 BVH 中的开始时间",
+    )
+    source_out_seconds: float | None = Field(
+        alias="sourceOutSec",
+        default=None,
+        gt=0,
+        description="片段在源 BVH 中的结束时间；null 表示文件末尾",
+    )
+    output_duration_seconds: float = Field(
+        alias="outputDurationSec",
+        gt=0,
+        description="裁剪片段变速后的输出时长",
+    )
+    gap_after_seconds: float = Field(
+        alias="gapAfterSec",
+        ge=0,
+        le=10,
+        description="当前片段与下一片段之间的过渡时长",
+    )
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        extra="forbid",
+        allow_inf_nan=False,
+    )
+
+    @model_validator(mode="after")
+    def validate_source_range(self) -> "MergeBvhSegment":
+        if (
+            self.source_out_seconds is not None
+            and self.source_out_seconds <= self.source_in_seconds
+        ):
+            raise ValueError("sourceOutSec 必须大于 sourceInSec")
+        return self
+
+
 class MergeBvhRequest(BaseModel):
-    action_id: str = Field(
+    action_id: str | None = Field(
+        default=None,
         alias="actionId",
         min_length=1,
-        description="业务后端的动作记录 ID",
+        description="合并任务回调关联 ID（业务后端调用时提供）",
     )
-    file_urls: list[AnyHttpUrl] = Field(
-        alias="fileUrls",
-        min_length=2,
-        description="按合并顺序排列的 BVH 文件下载地址，至少两个",
+    dance_id: str | int | None = Field(
+        default=None,
+        alias="danceId",
+        description="舞蹈 ID（直接提交舞蹈编排时提供）",
     )
-    intervals_seconds: list[float] = Field(
-        alias="intervalsSeconds",
-        description="相邻 BVH 文件之间的间隔秒数，数量必须比文件数量少一个",
+    timeline_offset_seconds: float = Field(
+        default=0,
+        alias="timelineOffsetSec",
+        ge=0,
+        description="首动作相对时间轴零点的偏移；不写入输出 BVH",
     )
-    bvh_motion_duration: list[float] = Field(
-        alias="bvhMotionDuration",
-        description="每个 BVH 文件用户拖动修改之后的动作时长，数量跟 bvh 文件数量一致",
+    segments: list[MergeBvhSegment] = Field(
+        min_length=1,
+        description="按最终合并顺序排列的 BVH 片段",
     )
     callback_url: AnyHttpUrl = Field(
         alias="callbackUrl",
@@ -173,22 +231,16 @@ class MergeBvhRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_intervals(self) -> "MergeBvhRequest":
-        expected_interval_count = len(self.file_urls) - 1
-        if len(self.intervals_seconds) != expected_interval_count:
-            raise ValueError(
-                f"intervalsSeconds 必须包含 {expected_interval_count} 个间隔"
-            )
-        if any(interval < 0 for interval in self.intervals_seconds):
-            raise ValueError("间隔秒数不能为负数")
-        expected_duration_count = len(self.file_urls)
-        if len(self.bvh_motion_duration) != expected_duration_count:
-            raise ValueError(
-                f"bvhMotionDuration 必须包含 {expected_duration_count} 个时长"
-            )
-        if any(duration < 0 for duration in self.bvh_motion_duration):
-            raise ValueError("BVH 动作时长不能为负数")
+    def validate_identifier(self) -> "MergeBvhRequest":
+        if self.action_id is None and self.dance_id is None:
+            raise ValueError("actionId 和 danceId 至少提供一个")
         return self
+
+    @property
+    def callback_reference_id(self) -> str:
+        if self.action_id is not None:
+            return self.action_id
+        return str(self.dance_id)
 
 
 class HealthResponse(BaseModel):
