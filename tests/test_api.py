@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 from io import BytesIO
@@ -42,6 +43,8 @@ Frame Time: 0.0333333
 0
 """
 UNSUPPORTED_BVH_CONTENT = b"HIERARCHY\nROOT Hips\nMOTION\nFrames: 1\n"
+SOURCE_SHA256 = hashlib.sha256(BVH_CONTENT).hexdigest()
+UNSUPPORTED_BVH_SHA256 = hashlib.sha256(UNSUPPORTED_BVH_CONTENT).hexdigest()
 MERGE_SOURCE_URL_1 = "https://minio.example.com/motions/first.bvh"
 MERGE_SOURCE_URL_2 = "https://minio.example.com/motions/second.bvh"
 MERGE_BVH_1 = b"""HIERARCHY
@@ -118,6 +121,7 @@ def _request_body() -> dict[str, object]:
     return {
         "actionId": "action-42",
         "originalFileUrl": SOURCE_URL,
+        "originalFileSha256": SOURCE_SHA256,
         "handleOptions": [1, 2, 3],
         "callbackUrl": CALLBACK_URL,
     }
@@ -557,6 +561,8 @@ def test_download_failure_callbacks_without_file() -> None:
 
 
 def test_unsupported_bvh_format_callbacks_without_processing() -> None:
+    payload = _request_body()
+    payload["originalFileSha256"] = UNSUPPORTED_BVH_SHA256
     app = create_app()
     with respx.mock:
         respx.get(SOURCE_URL).mock(
@@ -568,11 +574,85 @@ def test_unsupported_bvh_format_callbacks_without_processing() -> None:
         )
 
         with TestClient(app) as client:
-            response = client.post("/api/v1/bvh/process", json=_request_body())
+            response = client.post("/api/v1/bvh/process", json=payload)
 
     assert response.status_code == 200
     callback_body = callback.calls.last.request.content
     assert "只支持LAFAN1格式和Nokov格式的 BVH 文件".encode() in callback_body
+    assert b"\r\n\r\nfalse\r\n" in callback_body
+    assert b'name="file"' not in callback_body
+    assert len(progress_callback.calls) == 0
+
+
+def test_process_accepts_uppercase_original_file_sha256() -> None:
+    payload = _request_body()
+    payload["originalFileSha256"] = SOURCE_SHA256.upper()
+    app = create_app()
+    with respx.mock:
+        respx.get(SOURCE_URL).mock(
+            return_value=Response(
+                200,
+                content=BVH_CONTENT,
+                headers={"Content-Length": str(len(BVH_CONTENT))},
+            )
+        )
+        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+
+        with TestClient(app) as client:
+            response = client.post("/api/v1/bvh/process", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert b"\r\n\r\ntrue\r\n" in callback.calls.last.request.content
+    assert b'name="file"' in callback.calls.last.request.content
+
+
+def test_process_rejects_missing_original_file_sha256() -> None:
+    payload = _request_body()
+    del payload["originalFileSha256"]
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/v1/bvh/process", json=payload)
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert body["errors"][0]["field"] == "originalFileSha256"
+    assert body["errors"][0]["type"] == "missing"
+
+
+def test_process_rejects_invalid_original_file_sha256() -> None:
+    payload = _request_body()
+    payload["originalFileSha256"] = "not-a-sha256"
+
+    with TestClient(create_app()) as client:
+        response = client.post("/api/v1/bvh/process", json=payload)
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert body["errors"][0]["field"] == "originalFileSha256"
+    assert "SHA-256" in body["errors"][0]["message"]
+
+
+def test_process_checksum_mismatch_callbacks_without_processing() -> None:
+    payload = _request_body()
+    payload["originalFileSha256"] = "0" * 64
+    app = create_app()
+    with respx.mock:
+        respx.get(SOURCE_URL).mock(return_value=Response(200, content=BVH_CONTENT))
+        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+        progress_callback = respx.post(PROGRESS_CALLBACK_URL).mock(
+            return_value=Response(204)
+        )
+
+        with TestClient(app) as client:
+            response = client.post("/api/v1/bvh/process", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    callback_body = callback.calls.last.request.content
+    assert "下载文件的 SHA-256 与 originalFileSha256 不一致".encode() in callback_body
     assert b"\r\n\r\nfalse\r\n" in callback_body
     assert b'name="file"' not in callback_body
     assert len(progress_callback.calls) == 0

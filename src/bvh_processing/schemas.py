@@ -1,4 +1,15 @@
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, model_validator
+import re
+
+from pydantic import (
+    AnyHttpUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ProcessBvhRequest(BaseModel):
@@ -10,6 +21,10 @@ class ProcessBvhRequest(BaseModel):
     original_file_url: AnyHttpUrl = Field(
         alias="originalFileUrl",
         description="可直接下载 BVH 文件的 MinIO 地址",
+    )
+    original_file_sha256: str = Field(
+        alias="originalFileSha256",
+        description="原始 BVH 文件的 SHA-256，下载后用于完整性校验",
     )
     handle_options: list[int] = Field(
         alias="handleOptions",
@@ -24,6 +39,16 @@ class ProcessBvhRequest(BaseModel):
     )
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    @field_validator("original_file_sha256", mode="before")
+    @classmethod
+    def normalize_original_file_sha256(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise TypeError("originalFileSha256 必须是字符串")
+        digest = value.strip().lower()
+        if _SHA256_HEX.fullmatch(digest) is None:
+            raise ValueError("originalFileSha256 必须是 64 位十六进制 SHA-256")
+        return digest
 
 
 class RetargetBvhRequest(BaseModel):

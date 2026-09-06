@@ -58,11 +58,12 @@ async def health() -> HealthResponse:
 # 入参：ProcessBvhRequest（JSON）
 # - actionId：业务动作记录 ID。
 # - originalFileUrl：MinIO 中原始 BVH 的可下载地址。
+# - originalFileSha256：原始 BVH 的 SHA-256，下载后按原始字节校验。
 # - handleOptions：处理选项列表；1 去噪、2 平滑、3 脚步锁定、4 循环优化。
 # - callbackUrl：处理进度和最终结果的回调地址。
 #
 # 后台流程：
-#   download_bvh() → process_bvh() → send_progress_callback()
+#   download_bvh() → SHA-256 校验 → process_bvh() → send_progress_callback()
 #   → send_callback(file=处理结果)
 #   当前 process_bvh() 是算法接入点，联调阶段原样返回 BVH 内容；
 #   进度回调按 handleOptions 逐项发送，最终结果只发送一次。
@@ -77,9 +78,10 @@ async def health() -> HealthResponse:
     response_model=ProcessBvhResponse,
     summary="提交 BVH 处理任务",
     description=(
-        "异步接收 BVH 处理任务。任务执行期间，服务会对每个选中的处理选项 "
-        "向 callbackUrl 发送一次 multipart/form-data 进度回调；全部完成后，"
-        "再发送一次携带 file 的最终结果回调。"
+        "异步接收 BVH 处理任务。服务会下载 originalFileUrl 指向的文件，"
+        "并用 originalFileSha256 校验原始字节。任务执行期间，服务会对每个 "
+        "选中的处理选项向 callbackUrl 发送一次 multipart/form-data 进度回调；"
+        "全部完成后，再发送一次携带 file 的最终结果回调。"
     ),
     tags=["bvh"],
 )

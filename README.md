@@ -47,6 +47,7 @@ uv run bvh-processing \
 {
   "actionId": "action-42",
   "originalFileUrl": "https://minio.example.com/bucket/walk.bvh",
+  "originalFileSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "handleOptions": [1, 2, 3],
   "callbackUrl": "https://backend.example.com/callbacks/bvh"
 }
@@ -56,6 +57,8 @@ uv run bvh-processing \
 
 - `actionId`：业务后端的动作记录 ID，回调时原样返回。
 - `originalFileUrl`：可直接下载的 MinIO BVH 地址。
+- `originalFileSha256`：原始 BVH 的 64 位十六进制 SHA-256，大小写不敏感。
+  服务下载后按原始字节校验，不一致则回调失败且不处理文件。
 - `handleOptions`：按顺序执行的整数 JSON 数组。编号含义：`1` 整体去噪、
   `2` 整体平滑、`3` 脚步锁定校正、`4` 循环优化。
 - `callbackUrl`：处理完成后的回调地址。
@@ -92,6 +95,7 @@ curl -X POST \
   -d '{
     "actionId":"action-42",
     "originalFileUrl":"https://minio.example.com/bucket/walk.bvh",
+    "originalFileSha256":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     "handleOptions":[1,2,3],
     "callbackUrl":"https://backend.example.com/callbacks/bvh"
   }'

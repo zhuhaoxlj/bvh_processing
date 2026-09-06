@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from tempfile import SpooledTemporaryFile
@@ -39,6 +40,28 @@ def _source_filename(url: str, expected_suffix: str, fallback: str) -> str:
     return name if name.lower().endswith(expected_suffix) else fallback
 
 
+def _sha256_hex(content: BinaryIO) -> str:
+    digest = hashlib.sha256()
+    original_position = content.tell()
+    try:
+        content.seek(0)
+        while chunk := content.read(_CHUNK_SIZE):
+            digest.update(chunk)
+        return digest.hexdigest()
+    finally:
+        content.seek(original_position)
+
+
+def _verify_downloaded_sha256(content: BinaryIO, expected_sha256: str) -> None:
+    actual = _sha256_hex(content)
+    if actual != expected_sha256.lower():
+        raise BvhServiceError(
+            status_code=422,
+            code="source_checksum_mismatch",
+            message="下载文件的 SHA-256 与 originalFileSha256 不一致",
+        )
+
+
 async def _download_file(
     client: httpx.AsyncClient,
     source_url: str,
@@ -47,6 +70,7 @@ async def _download_file(
     expected_suffix: str,
     fallback_filename: str,
     validate_bvh: bool,
+    expected_sha256: str | None = None,
 ) -> DownloadedBvh:
     parsed = urlsplit(source_url)
     if parsed.username or parsed.password:
@@ -115,6 +139,13 @@ async def _download_file(
             message="MinIO 中的 BVH 文件为空",
         )
 
+    if expected_sha256 is not None:
+        try:
+            _verify_downloaded_sha256(content, expected_sha256)
+        except BvhServiceError:
+            content.close()
+            raise
+
     if validate_bvh:
         try:
             classify_downloaded_bvh(content)
@@ -140,6 +171,8 @@ async def download_bvh(
     client: httpx.AsyncClient,
     source_url: str,
     settings: Settings,
+    *,
+    expected_sha256: str | None = None,
 ) -> DownloadedBvh:
     return await _download_file(
         client,
@@ -148,6 +181,7 @@ async def download_bvh(
         expected_suffix=".bvh",
         fallback_filename="source.bvh",
         validate_bvh=True,
+        expected_sha256=expected_sha256,
     )
 
 

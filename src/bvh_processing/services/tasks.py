@@ -70,6 +70,7 @@ async def run_processing_task(
             client,
             str(payload.original_file_url),
             settings,
+            expected_sha256=payload.original_file_sha256,
         )
         result = process_bvh(resource, payload.handle_options)
     except Exception as error:
