@@ -105,9 +105,8 @@ curl -X POST \
 
 ### `POST /api/v1/bvh/retarget`
 
-后端提供一个可下载的 MinIO BVH 地址。服务下载 BVH 后生成机器人重定向 JSON，
-当前联调阶段固定返回内置的
-`Take_007_049_Skeleton7_g1_preview.json`，后续在后台任务中接入真实转换算法。
+后端提供一个可下载的 MinIO BVH 地址。服务下载 BVH 后，使用 Robot Retargeter
+按 `robotType` 重定向到对应机器人，并回调 Whole Body Tracking NPZ 与预览 JSON。
 
 请求：
 
@@ -120,7 +119,7 @@ curl -X POST \
 ```
 
 `robotType` 必须是整数：`1` 表示 G1、`2` 表示 H2、`3` 表示 R1。
-服务当前会记录该类型，后续用于选择对应机器人的转换算法。
+重定向算法按该类型选择对应的 Robot Retargeter 机型配置和 MJCF。
 
 任务接收后立即返回：
 
@@ -132,16 +131,10 @@ curl -X POST \
 }
 ```
 
-下载成功后，服务向 `callbackUrl` 发送一次 `multipart/form-data` 回调：
-
-```text
-success=true
-message=重定向 JSON 生成成功
-file=<Take_007_049_Skeleton7_g1_preview.json 文件内容>
-```
-
-文件部分的媒体类型为 `application/json`。下载或生成失败时，回调中
-`success=false` 且不包含 `file`。
+下载成功后，服务向 `callbackUrl` 发送一次 `multipart/form-data` 回调，包含
+`npzFile`（`{stem}_{g1|h2|r1}_tracking.npz`）和 `jsonFile`
+（`{stem}_{g1|h2|r1}_preview.json`）。下载或生成失败时，回调中
+`success=false` 且不包含文件。
 
 提交示例：
 

@@ -114,7 +114,7 @@ async def process(
 #
 # 入参：RetargetBvhRequest（JSON）
 # - originalFileUrl：LAFAN1/Nokov BVH 的 MinIO 下载地址。
-# - robotType：机器人类型，目前 1 表示 Unitree G1。
+# - robotType：机器人类型，1=G1、2=H2、3=R1。
 # - callbackUrl：重定向结果回调地址。
 #
 # 后台流程：
@@ -130,7 +130,7 @@ async def process(
     summary="提交 BVH 重定向任务",
     description=(
         "异步下载 MinIO 中的 LAFAN1/Nokov BVH，使用 Robot Retargeter "
-        "重定向为 Unitree G1 动作，并生成 Whole Body Tracking NPZ 和"
+        "重定向为 Unitree G1 / H2 / R1 动作，并生成 Whole Body Tracking NPZ 和"
         "元数据 JSON。完成后通过 callbackUrl 一次上传两个文件。"
     ),
     tags=["bvh"],

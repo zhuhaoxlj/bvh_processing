@@ -281,6 +281,38 @@ def test_retarget_download_failure_callbacks_without_file() -> None:
     assert b'name="file"' not in callback_body
 
 
+@pytest.mark.parametrize("robot_type", [2, 3])
+def test_retarget_accepts_h2_and_r1_robot_types(robot_type: int) -> None:
+    payload = {
+        "originalFileUrl": SOURCE_URL,
+        "robotType": robot_type,
+        "callbackUrl": CALLBACK_URL,
+    }
+    artifacts = RetargetArtifacts(
+        npz=BytesIO(RETARGET_NPZ),
+        npz_filename="walk_h2_tracking.npz",
+        preview=BytesIO(RETARGET_JSON),
+        preview_filename="walk_h2_preview.json",
+    )
+
+    with (
+        patch(
+            "bvh_processing.retargeting.task.retarget_downloaded_bvh",
+            return_value=artifacts,
+        ),
+        respx.mock,
+    ):
+        respx.get(SOURCE_URL).mock(return_value=Response(200, content=BVH_CONTENT))
+        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+
+        with TestClient(create_app()) as client:
+            response = client.post("/api/v1/bvh/retarget", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert len(callback.calls) == 1
+
+
 def test_retarget_rejects_invalid_robot_type() -> None:
     payload = {
         "originalFileUrl": SOURCE_URL,
@@ -762,7 +794,7 @@ def test_merge_accepts_single_segment_with_dance_id_and_trims_frames() -> None:
     assert response.status_code == 200
     assert len(source.calls) == 1
     callback_body = callback.calls.last.request.content
-    assert b'\r\n\r\n39\r\n' in callback_body
+    assert b"\r\n\r\n39\r\n" in callback_body
     assert b"Frames: 3" in callback_body
     assert b"1 0 0 0 0 0 0 0 0 0 0 0" in callback_body
     assert b"3 0 0 0 0 0 0 0 0 0 0 0" in callback_body

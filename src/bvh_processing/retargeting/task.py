@@ -8,6 +8,7 @@ import httpx
 from bvh_processing.config import Settings
 from bvh_processing.errors import BvhServiceError
 from bvh_processing.retargeting.exporter import RetargetArtifacts
+from bvh_processing.retargeting.robots import robot_profile
 from bvh_processing.retargeting.service import retarget_downloaded_bvh
 from bvh_processing.schemas import RetargetBvhRequest
 from bvh_processing.services.callback import (
@@ -54,10 +55,12 @@ async def run_retarget_task(
 ) -> None:
     resource: DownloadedBvh | None = None
     artifacts: RetargetArtifacts | None = None
+    robot = robot_profile(payload.robot_type)
     logger.info(
-        "BVH Robot Retargeter task %s robotType=%d robot=G1",
+        "BVH Robot Retargeter task %s robotType=%d robot=%s",
         task_id,
         payload.robot_type,
+        robot.display_name,
     )
     try:
         resource = await download_bvh(
@@ -65,7 +68,11 @@ async def run_retarget_task(
             str(payload.original_file_url),
             settings,
         )
-        artifacts = await asyncio.to_thread(retarget_downloaded_bvh, resource)
+        artifacts = await asyncio.to_thread(
+            retarget_downloaded_bvh,
+            resource,
+            payload.robot_type,
+        )
         await send_callback(
             client,
             callback_url=str(payload.callback_url),

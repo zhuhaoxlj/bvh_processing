@@ -13,107 +13,10 @@ import numpy as np
 from scipy.spatial.transform import Rotation, Slerp
 
 from bvh_processing.retargeting.robot_retargeter import RobotRetargetResult
+from bvh_processing.retargeting.robots import RobotProfile
 
 _OUTPUT_FPS = 50.0
 _SPOOL_MEMORY_LIMIT = 8 * 1024 * 1024
-_PREVIEW_MESH_GEOMS_PATH = (
-    Path(__file__).parent / "assets" / "g1_preview_mesh_geoms.json"
-)
-
-G1_MUJOCO_JOINT_NAMES = (
-    "left_hip_pitch_joint",
-    "left_hip_roll_joint",
-    "left_hip_yaw_joint",
-    "left_knee_joint",
-    "left_ankle_pitch_joint",
-    "left_ankle_roll_joint",
-    "right_hip_pitch_joint",
-    "right_hip_roll_joint",
-    "right_hip_yaw_joint",
-    "right_knee_joint",
-    "right_ankle_pitch_joint",
-    "right_ankle_roll_joint",
-    "waist_yaw_joint",
-    "waist_roll_joint",
-    "waist_pitch_joint",
-    "left_shoulder_pitch_joint",
-    "left_shoulder_roll_joint",
-    "left_shoulder_yaw_joint",
-    "left_elbow_joint",
-    "left_wrist_roll_joint",
-    "left_wrist_pitch_joint",
-    "left_wrist_yaw_joint",
-    "right_shoulder_pitch_joint",
-    "right_shoulder_roll_joint",
-    "right_shoulder_yaw_joint",
-    "right_elbow_joint",
-    "right_wrist_roll_joint",
-    "right_wrist_pitch_joint",
-    "right_wrist_yaw_joint",
-)
-G1_ISAACLAB_JOINT_NAMES = (
-    "left_hip_pitch_joint",
-    "right_hip_pitch_joint",
-    "waist_yaw_joint",
-    "left_hip_roll_joint",
-    "right_hip_roll_joint",
-    "waist_roll_joint",
-    "left_hip_yaw_joint",
-    "right_hip_yaw_joint",
-    "waist_pitch_joint",
-    "left_knee_joint",
-    "right_knee_joint",
-    "left_shoulder_pitch_joint",
-    "right_shoulder_pitch_joint",
-    "left_ankle_pitch_joint",
-    "right_ankle_pitch_joint",
-    "left_shoulder_roll_joint",
-    "right_shoulder_roll_joint",
-    "left_ankle_roll_joint",
-    "right_ankle_roll_joint",
-    "left_shoulder_yaw_joint",
-    "right_shoulder_yaw_joint",
-    "left_elbow_joint",
-    "right_elbow_joint",
-    "left_wrist_roll_joint",
-    "right_wrist_roll_joint",
-    "left_wrist_pitch_joint",
-    "right_wrist_pitch_joint",
-    "left_wrist_yaw_joint",
-    "right_wrist_yaw_joint",
-)
-G1_ISAACLAB_BODY_NAMES = (
-    "pelvis",
-    "left_hip_pitch_link",
-    "right_hip_pitch_link",
-    "waist_yaw_link",
-    "left_hip_roll_link",
-    "right_hip_roll_link",
-    "waist_roll_link",
-    "left_hip_yaw_link",
-    "right_hip_yaw_link",
-    "torso_link",
-    "left_knee_link",
-    "right_knee_link",
-    "left_shoulder_pitch_link",
-    "right_shoulder_pitch_link",
-    "left_ankle_pitch_link",
-    "right_ankle_pitch_link",
-    "left_shoulder_roll_link",
-    "right_shoulder_roll_link",
-    "left_ankle_roll_link",
-    "right_ankle_roll_link",
-    "left_shoulder_yaw_link",
-    "right_shoulder_yaw_link",
-    "left_elbow_link",
-    "right_elbow_link",
-    "left_wrist_roll_link",
-    "right_wrist_roll_link",
-    "left_wrist_pitch_link",
-    "right_wrist_pitch_link",
-    "left_wrist_yaw_link",
-    "right_wrist_yaw_link",
-)
 
 
 @dataclass(slots=True)
@@ -139,8 +42,39 @@ def _spooled(data: bytes) -> BinaryIO:
     return content
 
 
+def _hinge_joint_names(model: mj.MjModel) -> list[str]:
+    names: list[str] = []
+    for joint_id in range(model.njnt):
+        if model.jnt_type[joint_id] != mj.mjtJoint.mjJNT_HINGE:
+            continue
+        name = mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id)
+        if name is None:
+            raise ValueError(f"MuJoCo hinge joint {joint_id} is missing a name")
+        names.append(name)
+    return names
+
+
+def _articulated_body_names(model: mj.MjModel) -> list[str]:
+    names: list[str] = []
+    for body_id in range(1, model.nbody):
+        if int(model.body_jntnum[body_id]) <= 0:
+            continue
+        name = mj.mj_id2name(model, mj.mjtObj.mjOBJ_BODY, body_id)
+        if name is None:
+            raise ValueError(f"MuJoCo body {body_id} is missing a name")
+        names.append(name)
+    return names
+
+
+def _preview_mesh_geoms(robot: RobotProfile) -> list[object]:
+    if robot.preview_mesh_geoms_path is None:
+        return []
+    return json.loads(robot.preview_mesh_geoms_path.read_text())
+
+
 def _preview_payload(
     model: mj.MjModel,
+    robot: RobotProfile,
     root_position: np.ndarray,
     root_quaternion_xyzw: np.ndarray,
     joint_position_mujoco: np.ndarray,
@@ -149,8 +83,7 @@ def _preview_payload(
     """按 GMR retarget_vue 的逐帧 MuJoCo FK 格式构建预览数据。"""
     body_ids = list(range(1, model.nbody))
     body_names = [
-        mj.mj_id2name(model, mj.mjtObj.mjOBJ_BODY, body_id)
-        or f"body_{body_id}"
+        mj.mj_id2name(model, mj.mjtObj.mjOBJ_BODY, body_id) or f"body_{body_id}"
         for body_id in body_ids
     ]
     body_index = {body_id: index for index, body_id in enumerate(body_ids)}
@@ -176,12 +109,12 @@ def _preview_payload(
         body_quats.append(quaternions_xyzw.round(6).tolist())
         frames.append((positions * 100.0).round(4).tolist())
 
-    mesh_geoms = json.loads(_PREVIEW_MESH_GEOMS_PATH.read_text())
+    mesh_geoms = _preview_mesh_geoms(robot)
     stem = Path(source_filename).stem
     frame_count = int(root_position.shape[0])
     return {
-        "name": f"{stem}_g1_retarget.pkl",
-        "robot": "unitree_g1",
+        "name": f"{stem}_{robot.key}_retarget.pkl",
+        "robot": robot.preview_robot,
         "fps": _OUTPUT_FPS,
         "frame_time": 1.0 / _OUTPUT_FPS,
         "frame_count": frame_count,
@@ -249,9 +182,7 @@ def _linear_velocity(values: np.ndarray) -> np.ndarray:
 
 def _angular_velocity(quaternions_wxyz: np.ndarray) -> np.ndarray:
     quaternion_shape = quaternions_wxyz.shape
-    rotations = Rotation.from_quat(
-        quaternions_wxyz[..., [1, 2, 3, 0]].reshape(-1, 4)
-    )
+    rotations = Rotation.from_quat(quaternions_wxyz[..., [1, 2, 3, 0]].reshape(-1, 4))
     frame_count = quaternion_shape[0]
     rotations_per_frame = int(np.prod(quaternion_shape[1:-1]))
     velocity = np.empty((*quaternion_shape[:-1], 3), dtype=np.float64)
@@ -260,17 +191,16 @@ def _angular_velocity(quaternions_wxyz: np.ndarray) -> np.ndarray:
         next_index = min(frame_count - 1, frame_index + 1)
         elapsed = (next_index - previous_index) / _OUTPUT_FPS
         previous = rotations[
-            previous_index * rotations_per_frame :
-            (previous_index + 1) * rotations_per_frame
+            previous_index * rotations_per_frame : (previous_index + 1)
+            * rotations_per_frame
         ]
         following = rotations[
-            next_index * rotations_per_frame :
-            (next_index + 1) * rotations_per_frame
+            next_index * rotations_per_frame : (next_index + 1) * rotations_per_frame
         ]
         relative = previous.inv() * following
-        velocity[frame_index] = relative.as_rotvec().reshape(
-            (*quaternion_shape[1:-1], 3)
-        ) / elapsed
+        velocity[frame_index] = (
+            relative.as_rotvec().reshape((*quaternion_shape[1:-1], 3)) / elapsed
+        )
     return velocity
 
 
@@ -284,20 +214,32 @@ def export_tracking_artifacts(
         result,
         source_fps,
     )
-    joint_indexes = np.asarray(
-        [G1_MUJOCO_JOINT_NAMES.index(name) for name in G1_ISAACLAB_JOINT_NAMES]
-    )
+    mujoco_joint_names = _hinge_joint_names(result.model)
+    export_joint_names = list(result.robot.tracking_joint_names or mujoco_joint_names)
+    try:
+        joint_indexes = np.asarray(
+            [mujoco_joint_names.index(name) for name in export_joint_names]
+        )
+    except ValueError as exc:
+        raise ValueError(
+            f"{result.robot.display_name} 模型缺少导出所需关节: {exc}"
+        ) from exc
     joint_position = joint_position_mujoco[:, joint_indexes]
     joint_velocity = _linear_velocity(joint_position)
 
+    export_body_names = list(
+        result.robot.tracking_body_names or _articulated_body_names(result.model)
+    )
     body_ids = np.asarray(
         [
             mj.mj_name2id(result.model, mj.mjtObj.mjOBJ_BODY, name)
-            for name in G1_ISAACLAB_BODY_NAMES
+            for name in export_body_names
         ]
     )
     if np.any(body_ids < 0):
-        raise ValueError("G1 模型缺少 Whole Body Tracking 所需机身节点")
+        raise ValueError(
+            f"{result.robot.display_name} 模型缺少 Whole Body Tracking 所需机身节点"
+        )
 
     data = mj.MjData(result.model)
     body_position = []
@@ -332,6 +274,7 @@ def export_tracking_artifacts(
     stem = Path(source_filename).stem
     preview = _preview_payload(
         result.model,
+        result.robot,
         root_position,
         root_quaternion_xyzw,
         joint_position_mujoco,
@@ -342,7 +285,7 @@ def export_tracking_artifacts(
     )
     return RetargetArtifacts(
         npz=npz_content,
-        npz_filename=f"{stem}_g1_tracking.npz",
+        npz_filename=f"{stem}_{result.robot.key}_tracking.npz",
         preview=preview_content,
-        preview_filename=f"{stem}_g1_preview.json",
+        preview_filename=f"{stem}_{result.robot.key}_preview.json",
     )

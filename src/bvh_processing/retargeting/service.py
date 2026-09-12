@@ -1,4 +1,4 @@
-"""Robot Retargeter 的 BVH 到 G1 Whole Body Tracking 转换入口。"""
+"""Robot Retargeter 的 BVH 到 G1/H2/R1 Whole Body Tracking 转换入口。"""
 
 from __future__ import annotations
 
@@ -12,12 +12,17 @@ from bvh_processing.retargeting.exporter import (
     export_tracking_artifacts,
 )
 from bvh_processing.retargeting.robot_retargeter import retarget_bvh_frames
+from bvh_processing.retargeting.robots import robot_profile
 from bvh_processing.services.classify_bvh import classify_downloaded_bvh
 from bvh_processing.services.download import DownloadedBvh
 
 
-def retarget_downloaded_bvh(downloaded: DownloadedBvh) -> RetargetArtifacts:
-    """执行 Robot Retargeter，并生成训练 NPZ 与 GMR 预览 JSON。"""
+def retarget_downloaded_bvh(
+    downloaded: DownloadedBvh,
+    robot_type: int = 1,
+) -> RetargetArtifacts:
+    """执行 Robot Retargeter，并生成训练 NPZ 与预览 JSON。"""
+    robot = robot_profile(robot_type)
     bvh_format = classify_downloaded_bvh(downloaded.content)
     try:
         with TemporaryDirectory(prefix="bvh-retarget-") as directory:
@@ -29,6 +34,7 @@ def retarget_downloaded_bvh(downloaded: DownloadedBvh) -> RetargetArtifacts:
             result = retarget_bvh_frames(
                 frames,
                 source_fps,
+                robot=robot,
                 solver="daqp",
                 max_iterations=50,
             )

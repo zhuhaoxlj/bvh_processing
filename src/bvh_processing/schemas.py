@@ -66,8 +66,8 @@ class RetargetBvhRequest(BaseModel):
         alias="robotType",
         strict=True,
         ge=1,
-        le=1,
-        description="机器人类型：1 Unitree G1（Robot Retargeter）",
+        le=3,
+        description="机器人类型：1 Unitree G1、2 Unitree H2、3 Unitree R1",
     )
     callback_url: AnyHttpUrl = Field(
         alias="callbackUrl",

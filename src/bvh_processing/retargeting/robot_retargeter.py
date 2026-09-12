@@ -2,9 +2,9 @@
 
 The upstream project accepts precomputed SMPL-X keypoint files. This adapter
 keeps its link-length normalization and single-stage Mink IK solver, while
-feeding it the already parsed, Z-up BVH frames used by GMR. It intentionally
-uses GMR's standard 29-DoF G1 model so generated motions retain the repository's
-joint order and limits.
+feeding it the already parsed, Z-up BVH frames used by GMR. Robot-specific
+link chains and IK tables come from RobotProfile so G1, H2, and R1 share the
+same solver.
 
 Upstream: https://github.com/ccrpRepo/robot_retargeter
 Integrated from local revision: f1418972319287c1b93af0f7a3b445f613cff5e4
@@ -21,93 +21,7 @@ import mujoco as mj
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-DEFAULT_G1_XML = Path(__file__).with_name("assets") / "g1_mocap_29dof.xml"
-
-# link_name: (source parent, source child, robot parent anchor, robot child body)
-# The three virtual anchors reproduce the fixed helper bodies in the upstream
-# G1 XML without requiring a second copy of the robot meshes/model.
-LINK_CHAINS = (
-    ("left_hip", "hips_mean", "left_up_leg", "hips_anchor", "left_hip_roll_link"),
-    ("left_thigh", "left_up_leg", "left_leg", "left_hip_roll_link", "left_knee_link"),
-    ("left_calf", "left_leg", "left_foot", "left_knee_link", "left_ankle_roll_link"),
-    ("right_hip", "hips_mean", "right_up_leg", "hips_anchor", "right_hip_roll_link"),
-    (
-        "right_thigh",
-        "right_up_leg",
-        "right_leg",
-        "right_hip_roll_link",
-        "right_knee_link",
-    ),
-    (
-        "right_calf",
-        "right_leg",
-        "right_foot",
-        "right_knee_link",
-        "right_ankle_roll_link",
-    ),
-    ("neck", "hips_mean", "shoulder_mean", "hips_anchor", "neck_anchor"),
-    ("head", "shoulder_mean", "head", "neck_anchor", "head_anchor"),
-    (
-        "left_shoulder",
-        "shoulder_mean",
-        "left_arm",
-        "neck_anchor",
-        "left_shoulder_roll_link",
-    ),
-    (
-        "left_arm",
-        "left_arm",
-        "left_fore_arm",
-        "left_shoulder_roll_link",
-        "left_elbow_link",
-    ),
-    (
-        "left_fore_arm",
-        "left_fore_arm",
-        "left_hand",
-        "left_elbow_link",
-        "left_wrist_yaw_link",
-    ),
-    (
-        "right_shoulder",
-        "shoulder_mean",
-        "right_arm",
-        "neck_anchor",
-        "right_shoulder_roll_link",
-    ),
-    (
-        "right_arm",
-        "right_arm",
-        "right_fore_arm",
-        "right_shoulder_roll_link",
-        "right_elbow_link",
-    ),
-    (
-        "right_fore_arm",
-        "right_fore_arm",
-        "right_hand",
-        "right_elbow_link",
-        "right_wrist_yaw_link",
-    ),
-)
-
-# keypoint: (robot body, position cost, orientation cost, source orientation)
-IK_MATCH_TABLE = {
-    "hips_mean": ("pelvis", 100.0, 0.0, "hips"),
-    "left_hip": ("left_hip_roll_link", 30.0, 3.0, "left_up_leg"),
-    "left_thigh": ("left_knee_link", 0.0, 3.0, "left_leg"),
-    "left_calf": ("left_ankle_roll_link", 30.0, 3.0, "left_foot"),
-    "right_hip": ("right_hip_roll_link", 30.0, 3.0, "right_up_leg"),
-    "right_thigh": ("right_knee_link", 0.0, 3.0, "right_leg"),
-    "right_calf": ("right_ankle_roll_link", 30.0, 3.0, "right_foot"),
-    "head": ("torso_link", 0.0, 3.0, "head"),
-    "left_shoulder": ("left_shoulder_roll_link", 30.0, 3.0, "left_arm"),
-    "left_arm": ("left_elbow_link", 10.0, 1.0, "left_fore_arm"),
-    "left_fore_arm": ("left_wrist_yaw_link", 10.0, 1.0, "left_hand"),
-    "right_shoulder": ("right_shoulder_roll_link", 30.0, 3.0, "right_arm"),
-    "right_arm": ("right_elbow_link", 10.0, 1.0, "right_fore_arm"),
-    "right_fore_arm": ("right_wrist_yaw_link", 10.0, 1.0, "right_hand"),
-}
+from bvh_processing.retargeting.robots import G1, RobotProfile
 
 SOURCE_BODIES = {
     "hips": "Hips",
@@ -126,7 +40,7 @@ SOURCE_BODIES = {
     "right_hand": "RightHand",
 }
 
-# BVH-to-G1 frame offsets are the same conventions as GMR's Nokov IK config.
+# BVH-to-robot frame offsets are the same conventions as GMR's Nokov IK config.
 COMMON_OFFSET = np.array([0.5, -0.5, -0.5, -0.5], dtype=np.float64)
 ORIENTATION_OFFSETS = {
     "hips": COMMON_OFFSET,
@@ -152,6 +66,7 @@ class RobotRetargetResult:
     root_quaternion_xyzw: np.ndarray
     joint_position_rad: np.ndarray
     model: mj.MjModel
+    robot: RobotProfile
     diagnostics: dict
 
 
@@ -159,25 +74,44 @@ def _body_position(model: mj.MjModel, data: mj.MjData, name: str) -> np.ndarray:
     body_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, name)
     if body_id < 0:
         raise ValueError(
-            f"G1 model is missing body required by robot_retargeter: {name}"
+            f"robot model is missing body required by robot_retargeter: {name}"
         )
     return data.xpos[body_id].copy()
 
 
-def _robot_anchors(model: mj.MjModel) -> dict[str, np.ndarray]:
-    data = mj.MjData(model)
-    mj.mj_forward(model, data)
-    anchors = {
-        name: _body_position(model, data, name)
-        for name in {entry[3] for entry in LINK_CHAINS}
-        | {entry[4] for entry in LINK_CHAINS}
-        if not name.endswith("_anchor")
-    }
+def _g1_synthetic_anchors(model: mj.MjModel, data: mj.MjData) -> dict[str, np.ndarray]:
     pelvis = _body_position(model, data, "pelvis")
     torso = _body_position(model, data, "torso_link")
-    anchors["hips_anchor"] = pelvis + np.array([0.0, 0.0, -0.133165])
-    anchors["neck_anchor"] = torso + np.array([0.0, 0.0, 0.247])
+    anchors = {
+        "hips_anchor": pelvis + np.array([0.0, 0.0, -0.133165]),
+        "neck_anchor": torso + np.array([0.0, 0.0, 0.247]),
+    }
     anchors["head_anchor"] = anchors["neck_anchor"] + np.array([0.0, 0.0, 0.16])
+    return anchors
+
+
+def _robot_anchors(model: mj.MjModel, robot: RobotProfile) -> dict[str, np.ndarray]:
+    data = mj.MjData(model)
+    mj.mj_forward(model, data)
+    needed = {entry[3] for entry in robot.link_chains} | {
+        entry[4] for entry in robot.link_chains
+    }
+    synthetic = _g1_synthetic_anchors(model, data) if robot.key == "g1" else {}
+    anchors = {}
+    missing = []
+    for name in needed:
+        body_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, name)
+        if body_id >= 0:
+            anchors[name] = data.xpos[body_id].copy()
+        elif name in synthetic:
+            anchors[name] = synthetic[name]
+        else:
+            missing.append(name)
+    if missing:
+        raise ValueError(
+            f"{robot.display_name} model is missing bodies required by "
+            f"robot_retargeter: {', '.join(sorted(missing))}"
+        )
     return anchors
 
 
@@ -202,13 +136,14 @@ def _extract_source(
 def build_scaled_keypoints(
     frames: Sequence[Mapping[str, Sequence[np.ndarray]]],
     model: mj.MjModel,
+    robot: RobotProfile,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[str, float]]:
     """Convert GMR BVH frames into upstream-style robot-scaled keypoints."""
 
     if not frames:
         raise ValueError("robot_retargeter requires at least one BVH frame")
     source_positions, source_quaternions = _extract_source(frames)
-    anchors = _robot_anchors(model)
+    anchors = _robot_anchors(model, robot)
     scaled_source_positions = {"hips_mean": source_positions["hips_mean"].copy()}
     scaled_positions = {}
     link_lengths = {}
@@ -219,7 +154,7 @@ def build_scaled_keypoints(
         source_child,
         robot_parent,
         robot_child,
-    ) in LINK_CHAINS:
+    ) in robot.link_chains:
         source_vector = source_positions[source_child] - source_positions[source_parent]
         source_length = np.linalg.norm(source_vector, axis=1)
         if np.any(source_length <= 1.0e-8):
@@ -234,10 +169,8 @@ def build_scaled_keypoints(
         )
         scaled_positions[link_name] = scaled_source_positions[source_child]
 
-    # The upstream hips task targets a helper body below the pelvis. Shift the
-    # target so the standard GMR pelvis body reaches the equivalent world pose.
-    scaled_positions["hips_mean"] = scaled_source_positions["hips_mean"] + np.array(
-        [0.0, 0.0, 0.133165]
+    scaled_positions["hips_mean"] = scaled_source_positions["hips_mean"] + np.asarray(
+        robot.hips_position_offset, dtype=np.float64
     )
 
     target_quaternions = {}
@@ -246,7 +179,7 @@ def build_scaled_keypoints(
         _pos_cost,
         _rot_cost,
         source_name,
-    ) in IK_MATCH_TABLE.items():
+    ) in robot.ik_match_table.items():
         source_xyzw = source_quaternions[source_name][:, [1, 2, 3, 0]]
         offset_xyzw = ORIENTATION_OFFSETS[source_name][[1, 2, 3, 0]]
         adjusted_xyzw = (
@@ -274,7 +207,8 @@ def retarget_bvh_frames(
     frames: Sequence[Mapping[str, Sequence[np.ndarray]]],
     motion_fps: float,
     *,
-    model_path: str | Path = DEFAULT_G1_XML,
+    robot: RobotProfile = G1,
+    model_path: str | Path | None = None,
     solver: str = "daqp",
     damping: float = 1.0,
     max_iterations: int = 50,
@@ -284,11 +218,12 @@ def retarget_bvh_frames(
 
     if not np.isfinite(motion_fps) or motion_fps <= 0.0:
         raise ValueError(f"motion_fps must be finite and positive, got {motion_fps}")
-    model = mj.MjModel.from_xml_path(str(model_path))
+    xml_path = Path(model_path) if model_path is not None else robot.xml_path
+    model = mj.MjModel.from_xml_path(str(xml_path))
     _apply_upstream_limit_offsets(model)
     configuration = mink.Configuration(model)
     limits = [mink.ConfigurationLimit(model)]
-    positions, quaternions, link_lengths = build_scaled_keypoints(frames, model)
+    positions, quaternions, link_lengths = build_scaled_keypoints(frames, model, robot)
 
     tasks = {}
     for keypoint_name, (
@@ -296,7 +231,7 @@ def retarget_bvh_frames(
         position_cost,
         orientation_cost,
         _source_name,
-    ) in IK_MATCH_TABLE.items():
+    ) in robot.ik_match_table.items():
         tasks[keypoint_name] = mink.FrameTask(
             frame_name=robot_body,
             frame_type="body",
@@ -368,6 +303,7 @@ def retarget_bvh_frames(
     diagnostics = {
         "upstream_repository": "https://github.com/ccrpRepo/robot_retargeter",
         "upstream_revision": "f1418972319287c1b93af0f7a3b445f613cff5e4",
+        "robot": robot.key,
         "solver": solver,
         "max_iterations": int(max_iterations),
         "error_tolerance": float(error_tolerance),
@@ -384,5 +320,6 @@ def retarget_bvh_frames(
         root_quaternion_xyzw=qpos[:, 3:7][:, [1, 2, 3, 0]],
         joint_position_rad=qpos[:, 7:],
         model=model,
+        robot=robot,
         diagnostics=diagnostics,
     )

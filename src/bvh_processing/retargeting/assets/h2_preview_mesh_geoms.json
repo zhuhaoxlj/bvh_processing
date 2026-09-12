@@ -1,0 +1,1857 @@
+[
+  {
+    "name": "geom_1",
+    "body": 0,
+    "body_name": "pelvis",
+    "mesh_name": "pelvis",
+    "mesh_url": "/assets/unitree_h2/meshes/pelvis.stl",
+    "pos": [
+      1e-06,
+      0.001509,
+      -0.003244
+    ],
+    "quat": [
+      0.000415,
+      1e-05,
+      -4.8e-05,
+      1.0
+    ],
+    "mesh_pos": [
+      1e-06,
+      0.001509,
+      -0.003244
+    ],
+    "mesh_quat": [
+      0.000415,
+      1e-05,
+      -4.8e-05,
+      1.0
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_2",
+    "body": 0,
+    "body_name": "pelvis",
+    "mesh_name": "pelvis",
+    "mesh_url": "/assets/unitree_h2/meshes/pelvis.stl",
+    "pos": [
+      1e-06,
+      0.001509,
+      -0.003244
+    ],
+    "quat": [
+      0.000415,
+      1e-05,
+      -4.8e-05,
+      1.0
+    ],
+    "mesh_pos": [
+      1e-06,
+      0.001509,
+      -0.003244
+    ],
+    "mesh_quat": [
+      0.000415,
+      1e-05,
+      -4.8e-05,
+      1.0
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_3",
+    "body": 2,
+    "body_name": "left_hip_pitch_link",
+    "mesh_name": "left_hip_pitch_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_hip_pitch_link.stl",
+    "pos": [
+      0.000852,
+      0.055282,
+      -0.015905
+    ],
+    "quat": [
+      0.488794,
+      0.009418,
+      0.00723,
+      0.872318
+    ],
+    "mesh_pos": [
+      0.000852,
+      0.055282,
+      -0.015905
+    ],
+    "mesh_quat": [
+      0.488794,
+      0.009418,
+      0.00723,
+      0.872318
+    ],
+    "rgba": [
+      0.2,
+      0.2,
+      0.2,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_4",
+    "body": 3,
+    "body_name": "left_hip_roll_link",
+    "mesh_name": "left_hip_roll_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_hip_roll_link.stl",
+    "pos": [
+      -0.034624,
+      -0.001466,
+      -0.037019
+    ],
+    "quat": [
+      0.677507,
+      -0.252235,
+      0.651478,
+      -0.230084
+    ],
+    "mesh_pos": [
+      -0.034624,
+      -0.001466,
+      -0.037019
+    ],
+    "mesh_quat": [
+      0.677507,
+      -0.252235,
+      0.651478,
+      -0.230084
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_5",
+    "body": 4,
+    "body_name": "left_hip_yaw_link",
+    "mesh_name": "left_hip_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_hip_yaw_link.stl",
+    "pos": [
+      0.002948,
+      -0.000276,
+      -0.14888
+    ],
+    "quat": [
+      -0.01793,
+      -0.011534,
+      0.735319,
+      0.677385
+    ],
+    "mesh_pos": [
+      0.002948,
+      -0.000276,
+      -0.14888
+    ],
+    "mesh_quat": [
+      -0.01793,
+      -0.011534,
+      0.735319,
+      0.677385
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_6",
+    "body": 4,
+    "body_name": "left_hip_yaw_link",
+    "mesh_name": "left_hip_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_hip_yaw_link.stl",
+    "pos": [
+      0.002948,
+      -0.000276,
+      -0.14888
+    ],
+    "quat": [
+      -0.01793,
+      -0.011534,
+      0.735319,
+      0.677385
+    ],
+    "mesh_pos": [
+      0.002948,
+      -0.000276,
+      -0.14888
+    ],
+    "mesh_quat": [
+      -0.01793,
+      -0.011534,
+      0.735319,
+      0.677385
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_7",
+    "body": 5,
+    "body_name": "left_knee_link",
+    "mesh_name": "left_knee_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_knee_link.stl",
+    "pos": [
+      0.011194,
+      -0.023043,
+      -0.15776
+    ],
+    "quat": [
+      0.006876,
+      0.006884,
+      0.708398,
+      0.705747
+    ],
+    "mesh_pos": [
+      0.011194,
+      -0.023043,
+      -0.15776
+    ],
+    "mesh_quat": [
+      0.006876,
+      0.006884,
+      0.708398,
+      0.705747
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_8",
+    "body": 6,
+    "body_name": "left_ankle_roll_link",
+    "mesh_name": "left_ankle_roll_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_ankle_roll_link.stl",
+    "pos": [
+      -0.014494,
+      0.000124,
+      0.0
+    ],
+    "quat": [
+      0.707107,
+      0.0,
+      0.0,
+      0.707107
+    ],
+    "mesh_pos": [
+      -0.014494,
+      0.000124,
+      0.0
+    ],
+    "mesh_quat": [
+      0.707107,
+      0.0,
+      0.0,
+      0.707107
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_9",
+    "body": 7,
+    "body_name": "left_ankle_pitch_link",
+    "mesh_name": "left_ankle_pitch_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_ankle_pitch_link.stl",
+    "pos": [
+      0.031403,
+      0.037342,
+      -0.023706
+    ],
+    "quat": [
+      0.725872,
+      0.003157,
+      0.68782,
+      0.001747
+    ],
+    "mesh_pos": [
+      0.031403,
+      0.037342,
+      -0.023706
+    ],
+    "mesh_quat": [
+      0.725872,
+      0.003157,
+      0.68782,
+      0.001747
+    ],
+    "rgba": [
+      0.4,
+      0.4,
+      0.4,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_10",
+    "body": 7,
+    "body_name": "left_ankle_pitch_link",
+    "mesh_name": "left_ankle_pitch_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_ankle_pitch_link.stl",
+    "pos": [
+      0.031403,
+      0.037342,
+      -0.023706
+    ],
+    "quat": [
+      0.725872,
+      0.003157,
+      0.68782,
+      0.001747
+    ],
+    "mesh_pos": [
+      0.031403,
+      0.037342,
+      -0.023706
+    ],
+    "mesh_quat": [
+      0.725872,
+      0.003157,
+      0.68782,
+      0.001747
+    ],
+    "rgba": [
+      0.2,
+      0.2,
+      0.2,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_11",
+    "body": 10,
+    "body_name": "right_hip_pitch_link",
+    "mesh_name": "right_hip_pitch_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_hip_pitch_link.stl",
+    "pos": [
+      0.000852,
+      -0.055281,
+      -0.015905
+    ],
+    "quat": [
+      0.872334,
+      -0.00722,
+      -0.009419,
+      0.488767
+    ],
+    "mesh_pos": [
+      0.000852,
+      -0.055281,
+      -0.015905
+    ],
+    "mesh_quat": [
+      0.872334,
+      -0.00722,
+      -0.009419,
+      0.488767
+    ],
+    "rgba": [
+      0.2,
+      0.2,
+      0.2,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_12",
+    "body": 11,
+    "body_name": "right_hip_roll_link",
+    "mesh_name": "right_hip_roll_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_hip_roll_link.stl",
+    "pos": [
+      -0.034624,
+      0.001466,
+      -0.03702
+    ],
+    "quat": [
+      0.677486,
+      0.252251,
+      0.651485,
+      0.230106
+    ],
+    "mesh_pos": [
+      -0.034624,
+      0.001466,
+      -0.03702
+    ],
+    "mesh_quat": [
+      0.677486,
+      0.252251,
+      0.651485,
+      0.230106
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_13",
+    "body": 12,
+    "body_name": "right_hip_yaw_link",
+    "mesh_name": "right_hip_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_hip_yaw_link.stl",
+    "pos": [
+      0.002947,
+      0.000271,
+      -0.148877
+    ],
+    "quat": [
+      -0.011515,
+      -0.01791,
+      0.677552,
+      0.735166
+    ],
+    "mesh_pos": [
+      0.002947,
+      0.000271,
+      -0.148877
+    ],
+    "mesh_quat": [
+      -0.011515,
+      -0.01791,
+      0.677552,
+      0.735166
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_14",
+    "body": 12,
+    "body_name": "right_hip_yaw_link",
+    "mesh_name": "right_hip_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_hip_yaw_link.stl",
+    "pos": [
+      0.002947,
+      0.000271,
+      -0.148877
+    ],
+    "quat": [
+      -0.011515,
+      -0.01791,
+      0.677552,
+      0.735166
+    ],
+    "mesh_pos": [
+      0.002947,
+      0.000271,
+      -0.148877
+    ],
+    "mesh_quat": [
+      -0.011515,
+      -0.01791,
+      0.677552,
+      0.735166
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_15",
+    "body": 13,
+    "body_name": "right_knee_link",
+    "mesh_name": "right_knee_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_knee_link.stl",
+    "pos": [
+      0.011195,
+      0.023043,
+      -0.157768
+    ],
+    "quat": [
+      0.006881,
+      0.006878,
+      0.705702,
+      0.708442
+    ],
+    "mesh_pos": [
+      0.011195,
+      0.023043,
+      -0.157768
+    ],
+    "mesh_quat": [
+      0.006881,
+      0.006878,
+      0.705702,
+      0.708442
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_16",
+    "body": 14,
+    "body_name": "right_ankle_roll_link",
+    "mesh_name": "right_ankle_roll_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_ankle_roll_link.stl",
+    "pos": [
+      -0.014494,
+      -0.000124,
+      -0.0
+    ],
+    "quat": [
+      0.707107,
+      0.0,
+      0.0,
+      0.707107
+    ],
+    "mesh_pos": [
+      -0.014494,
+      -0.000124,
+      -0.0
+    ],
+    "mesh_quat": [
+      0.707107,
+      0.0,
+      0.0,
+      0.707107
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_17",
+    "body": 15,
+    "body_name": "right_ankle_pitch_link",
+    "mesh_name": "right_ankle_pitch_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_ankle_pitch_link.stl",
+    "pos": [
+      0.031406,
+      -0.037343,
+      -0.023706
+    ],
+    "quat": [
+      0.72587,
+      -0.003171,
+      0.687822,
+      -0.001748
+    ],
+    "mesh_pos": [
+      0.031406,
+      -0.037343,
+      -0.023706
+    ],
+    "mesh_quat": [
+      0.72587,
+      -0.003171,
+      0.687822,
+      -0.001748
+    ],
+    "rgba": [
+      0.4,
+      0.4,
+      0.4,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_18",
+    "body": 15,
+    "body_name": "right_ankle_pitch_link",
+    "mesh_name": "right_ankle_pitch_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_ankle_pitch_link.stl",
+    "pos": [
+      0.031406,
+      -0.037343,
+      -0.023706
+    ],
+    "quat": [
+      0.72587,
+      -0.003171,
+      0.687822,
+      -0.001748
+    ],
+    "mesh_pos": [
+      0.031406,
+      -0.037343,
+      -0.023706
+    ],
+    "mesh_quat": [
+      0.72587,
+      -0.003171,
+      0.687822,
+      -0.001748
+    ],
+    "rgba": [
+      0.2,
+      0.2,
+      0.2,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_19",
+    "body": 18,
+    "body_name": "waist_yaw_link",
+    "mesh_name": "waist_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/waist_yaw_link.stl",
+    "pos": [
+      0.000169,
+      -0.0,
+      0.019035
+    ],
+    "quat": [
+      0.560427,
+      0.559629,
+      0.431969,
+      0.431439
+    ],
+    "mesh_pos": [
+      0.000169,
+      -0.0,
+      0.019035
+    ],
+    "mesh_quat": [
+      0.560427,
+      0.559629,
+      0.431969,
+      0.431439
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_20",
+    "body": 19,
+    "body_name": "waist_roll_link",
+    "mesh_name": "waist_roll_link",
+    "mesh_url": "/assets/unitree_h2/meshes/waist_roll_link.stl",
+    "pos": [
+      0.0,
+      -0.0,
+      -0.0
+    ],
+    "quat": [
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "mesh_pos": [
+      0.0,
+      -0.0,
+      -0.0
+    ],
+    "mesh_quat": [
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_21",
+    "body": 20,
+    "body_name": "torso_link",
+    "mesh_name": "torso_link",
+    "mesh_url": "/assets/unitree_h2/meshes/torso_link.stl",
+    "pos": [
+      -0.013269,
+      -9.6e-05,
+      0.231567
+    ],
+    "quat": [
+      -3.6e-05,
+      -0.011836,
+      0.001299,
+      0.999929
+    ],
+    "mesh_pos": [
+      -0.013269,
+      -9.6e-05,
+      0.231567
+    ],
+    "mesh_quat": [
+      -3.6e-05,
+      -0.011836,
+      0.001299,
+      0.999929
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_22",
+    "body": 20,
+    "body_name": "torso_link",
+    "mesh_name": "torso_link",
+    "mesh_url": "/assets/unitree_h2/meshes/torso_link.stl",
+    "pos": [
+      -0.013269,
+      -9.6e-05,
+      0.231567
+    ],
+    "quat": [
+      -3.6e-05,
+      -0.011836,
+      0.001299,
+      0.999929
+    ],
+    "mesh_pos": [
+      -0.013269,
+      -9.6e-05,
+      0.231567
+    ],
+    "mesh_quat": [
+      -3.6e-05,
+      -0.011836,
+      0.001299,
+      0.999929
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_23",
+    "body": 22,
+    "body_name": "head_pitch_link",
+    "mesh_name": "head_pitch_link",
+    "mesh_url": "/assets/unitree_h2/meshes/head_pitch_link.stl",
+    "pos": [
+      0.0,
+      0.019337,
+      0.047858
+    ],
+    "quat": [
+      0.004513,
+      0.0,
+      -7.3e-05,
+      0.99999
+    ],
+    "mesh_pos": [
+      0.0,
+      0.019337,
+      0.047858
+    ],
+    "mesh_quat": [
+      0.004513,
+      0.0,
+      -7.3e-05,
+      0.99999
+    ],
+    "rgba": [
+      0.4,
+      0.4,
+      0.4,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_24",
+    "body": 23,
+    "body_name": "head_yaw_link",
+    "mesh_name": "head_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/head_yaw_link.stl",
+    "pos": [
+      0.014797,
+      3e-06,
+      0.034399
+    ],
+    "quat": [
+      -0.132907,
+      -0.13294,
+      0.694567,
+      0.694435
+    ],
+    "mesh_pos": [
+      0.014797,
+      3e-06,
+      0.034399
+    ],
+    "mesh_quat": [
+      -0.132907,
+      -0.13294,
+      0.694567,
+      0.694435
+    ],
+    "rgba": [
+      0.4,
+      0.4,
+      0.4,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_25",
+    "body": 23,
+    "body_name": "head_yaw_link",
+    "mesh_name": "head_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/head_yaw_link.stl",
+    "pos": [
+      0.014797,
+      3e-06,
+      0.034399
+    ],
+    "quat": [
+      -0.132907,
+      -0.13294,
+      0.694567,
+      0.694435
+    ],
+    "mesh_pos": [
+      0.014797,
+      3e-06,
+      0.034399
+    ],
+    "mesh_quat": [
+      -0.132907,
+      -0.13294,
+      0.694567,
+      0.694435
+    ],
+    "rgba": [
+      0.4,
+      0.4,
+      0.4,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_26",
+    "body": 24,
+    "body_name": "left_shoulder_pitch_link",
+    "mesh_name": "left_shoulder_pitch_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_shoulder_pitch_link.stl",
+    "pos": [
+      -0.002648,
+      0.044333,
+      -0.021817
+    ],
+    "quat": [
+      0.326973,
+      0.012985,
+      0.009071,
+      0.944901
+    ],
+    "mesh_pos": [
+      -0.002648,
+      0.044333,
+      -0.021817
+    ],
+    "mesh_quat": [
+      0.326973,
+      0.012985,
+      0.009071,
+      0.944901
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_27",
+    "body": 24,
+    "body_name": "left_shoulder_pitch_link",
+    "mesh_name": "left_shoulder_pitch_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_shoulder_pitch_link.stl",
+    "pos": [
+      -0.002648,
+      0.044333,
+      -0.021817
+    ],
+    "quat": [
+      0.326973,
+      0.012985,
+      0.009071,
+      0.944901
+    ],
+    "mesh_pos": [
+      -0.002648,
+      0.044333,
+      -0.021817
+    ],
+    "mesh_quat": [
+      0.326973,
+      0.012985,
+      0.009071,
+      0.944901
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_28",
+    "body": 25,
+    "body_name": "left_shoulder_roll_link",
+    "mesh_name": "left_shoulder_roll_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_shoulder_roll_link.stl",
+    "pos": [
+      -0.001542,
+      0.003326,
+      -0.047795
+    ],
+    "quat": [
+      0.01793,
+      -0.026493,
+      0.707215,
+      0.706274
+    ],
+    "mesh_pos": [
+      -0.001542,
+      0.003326,
+      -0.047795
+    ],
+    "mesh_quat": [
+      0.01793,
+      -0.026493,
+      0.707215,
+      0.706274
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_29",
+    "body": 25,
+    "body_name": "left_shoulder_roll_link",
+    "mesh_name": "left_shoulder_roll_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_shoulder_roll_link.stl",
+    "pos": [
+      -0.001542,
+      0.003326,
+      -0.047795
+    ],
+    "quat": [
+      0.01793,
+      -0.026493,
+      0.707215,
+      0.706274
+    ],
+    "mesh_pos": [
+      -0.001542,
+      0.003326,
+      -0.047795
+    ],
+    "mesh_quat": [
+      0.01793,
+      -0.026493,
+      0.707215,
+      0.706274
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_30",
+    "body": 26,
+    "body_name": "left_shoulder_yaw_link",
+    "mesh_name": "left_shoulder_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_shoulder_yaw_link.stl",
+    "pos": [
+      0.001646,
+      0.006903,
+      -0.053329
+    ],
+    "quat": [
+      0.045454,
+      -0.142335,
+      0.719542,
+      0.678184
+    ],
+    "mesh_pos": [
+      0.001646,
+      0.006903,
+      -0.053329
+    ],
+    "mesh_quat": [
+      0.045454,
+      -0.142335,
+      0.719542,
+      0.678184
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_31",
+    "body": 26,
+    "body_name": "left_shoulder_yaw_link",
+    "mesh_name": "left_shoulder_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_shoulder_yaw_link.stl",
+    "pos": [
+      0.001646,
+      0.006903,
+      -0.053329
+    ],
+    "quat": [
+      0.045454,
+      -0.142335,
+      0.719542,
+      0.678184
+    ],
+    "mesh_pos": [
+      0.001646,
+      0.006903,
+      -0.053329
+    ],
+    "mesh_quat": [
+      0.045454,
+      -0.142335,
+      0.719542,
+      0.678184
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_32",
+    "body": 27,
+    "body_name": "left_elbow_link",
+    "mesh_name": "left_elbow_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_elbow_link.stl",
+    "pos": [
+      0.052128,
+      -0.024295,
+      -0.008305
+    ],
+    "quat": [
+      0.432196,
+      0.615044,
+      0.418844,
+      0.509409
+    ],
+    "mesh_pos": [
+      0.052128,
+      -0.024295,
+      -0.008305
+    ],
+    "mesh_quat": [
+      0.432196,
+      0.615044,
+      0.418844,
+      0.509409
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_33",
+    "body": 27,
+    "body_name": "left_elbow_link",
+    "mesh_name": "left_elbow_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_elbow_link.stl",
+    "pos": [
+      0.052128,
+      -0.024295,
+      -0.008305
+    ],
+    "quat": [
+      0.432196,
+      0.615044,
+      0.418844,
+      0.509409
+    ],
+    "mesh_pos": [
+      0.052128,
+      -0.024295,
+      -0.008305
+    ],
+    "mesh_quat": [
+      0.432196,
+      0.615044,
+      0.418844,
+      0.509409
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_34",
+    "body": 28,
+    "body_name": "left_wrist_roll_link",
+    "mesh_name": "left_wrist_roll_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_wrist_roll_link.stl",
+    "pos": [
+      0.034342,
+      0.00039,
+      0.000129
+    ],
+    "quat": [
+      0.491588,
+      -0.513958,
+      0.505341,
+      0.488691
+    ],
+    "mesh_pos": [
+      0.034342,
+      0.00039,
+      0.000129
+    ],
+    "mesh_quat": [
+      0.491588,
+      -0.513958,
+      0.505341,
+      0.488691
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_35",
+    "body": 29,
+    "body_name": "left_wrist_pitch_link",
+    "mesh_name": "left_wrist_pitch_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_wrist_pitch_link.stl",
+    "pos": [
+      0.062573,
+      -0.031039,
+      -0.000339
+    ],
+    "quat": [
+      0.729059,
+      -0.002929,
+      0.684439,
+      0.002638
+    ],
+    "mesh_pos": [
+      0.062573,
+      -0.031039,
+      -0.000339
+    ],
+    "mesh_quat": [
+      0.729059,
+      -0.002929,
+      0.684439,
+      0.002638
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_36",
+    "body": 30,
+    "body_name": "left_wrist_yaw_link",
+    "mesh_name": "left_wrist_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_wrist_yaw_link.stl",
+    "pos": [
+      0.019252,
+      1.7e-05,
+      3.2e-05
+    ],
+    "quat": [
+      -0.000182,
+      -0.000132,
+      0.707429,
+      0.706784
+    ],
+    "mesh_pos": [
+      0.019252,
+      1.7e-05,
+      3.2e-05
+    ],
+    "mesh_quat": [
+      -0.000182,
+      -0.000132,
+      0.707429,
+      0.706784
+    ],
+    "rgba": [
+      0.4,
+      0.4,
+      0.4,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_37",
+    "body": 30,
+    "body_name": "left_wrist_yaw_link",
+    "mesh_name": "left_wrist_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_wrist_yaw_link.stl",
+    "pos": [
+      0.019252,
+      1.7e-05,
+      3.2e-05
+    ],
+    "quat": [
+      -0.000182,
+      -0.000132,
+      0.707429,
+      0.706784
+    ],
+    "mesh_pos": [
+      0.019252,
+      1.7e-05,
+      3.2e-05
+    ],
+    "mesh_quat": [
+      -0.000182,
+      -0.000132,
+      0.707429,
+      0.706784
+    ],
+    "rgba": [
+      0.4,
+      0.4,
+      0.4,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_38",
+    "body": 30,
+    "body_name": "left_wrist_yaw_link",
+    "mesh_name": "left_hand_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_hand_link.stl",
+    "pos": [
+      0.12815,
+      -0.0072,
+      0.005896
+    ],
+    "quat": [
+      0.537204,
+      0.434908,
+      0.447199,
+      0.567698
+    ],
+    "mesh_pos": [
+      0.070435,
+      -0.0072,
+      0.006045
+    ],
+    "mesh_quat": [
+      0.537204,
+      0.434908,
+      0.447199,
+      0.567698
+    ],
+    "rgba": [
+      0.4,
+      0.4,
+      0.4,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_39",
+    "body": 30,
+    "body_name": "left_wrist_yaw_link",
+    "mesh_name": "left_hand_link",
+    "mesh_url": "/assets/unitree_h2/meshes/left_hand_link.stl",
+    "pos": [
+      0.12815,
+      -0.0072,
+      0.005896
+    ],
+    "quat": [
+      0.537204,
+      0.434908,
+      0.447199,
+      0.567698
+    ],
+    "mesh_pos": [
+      0.070435,
+      -0.0072,
+      0.006045
+    ],
+    "mesh_quat": [
+      0.537204,
+      0.434908,
+      0.447199,
+      0.567698
+    ],
+    "rgba": [
+      0.4,
+      0.4,
+      0.4,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_40",
+    "body": 31,
+    "body_name": "right_shoulder_pitch_link",
+    "mesh_name": "right_shoulder_pitch_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_shoulder_pitch_link.stl",
+    "pos": [
+      -0.002648,
+      -0.044333,
+      -0.02182
+    ],
+    "quat": [
+      -0.326998,
+      0.013032,
+      -0.008889,
+      0.944893
+    ],
+    "mesh_pos": [
+      -0.002648,
+      -0.044333,
+      -0.02182
+    ],
+    "mesh_quat": [
+      -0.326998,
+      0.013032,
+      -0.008889,
+      0.944893
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_41",
+    "body": 31,
+    "body_name": "right_shoulder_pitch_link",
+    "mesh_name": "right_shoulder_pitch_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_shoulder_pitch_link.stl",
+    "pos": [
+      -0.002648,
+      -0.044333,
+      -0.02182
+    ],
+    "quat": [
+      -0.326998,
+      0.013032,
+      -0.008889,
+      0.944893
+    ],
+    "mesh_pos": [
+      -0.002648,
+      -0.044333,
+      -0.02182
+    ],
+    "mesh_quat": [
+      -0.326998,
+      0.013032,
+      -0.008889,
+      0.944893
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_42",
+    "body": 32,
+    "body_name": "right_shoulder_roll_link",
+    "mesh_name": "right_shoulder_roll_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_shoulder_roll_link.stl",
+    "pos": [
+      -0.001542,
+      -0.003326,
+      -0.047795
+    ],
+    "quat": [
+      -0.0265,
+      0.017921,
+      0.706278,
+      0.707211
+    ],
+    "mesh_pos": [
+      -0.001542,
+      -0.003326,
+      -0.047795
+    ],
+    "mesh_quat": [
+      -0.0265,
+      0.017921,
+      0.706278,
+      0.707211
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_43",
+    "body": 32,
+    "body_name": "right_shoulder_roll_link",
+    "mesh_name": "right_shoulder_roll_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_shoulder_roll_link.stl",
+    "pos": [
+      -0.001542,
+      -0.003326,
+      -0.047795
+    ],
+    "quat": [
+      -0.0265,
+      0.017921,
+      0.706278,
+      0.707211
+    ],
+    "mesh_pos": [
+      -0.001542,
+      -0.003326,
+      -0.047795
+    ],
+    "mesh_quat": [
+      -0.0265,
+      0.017921,
+      0.706278,
+      0.707211
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_44",
+    "body": 33,
+    "body_name": "right_shoulder_yaw_link",
+    "mesh_name": "right_shoulder_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_shoulder_yaw_link.stl",
+    "pos": [
+      0.001646,
+      -0.006902,
+      -0.053329
+    ],
+    "quat": [
+      -0.142347,
+      0.045441,
+      0.678151,
+      0.719572
+    ],
+    "mesh_pos": [
+      0.001646,
+      -0.006902,
+      -0.053329
+    ],
+    "mesh_quat": [
+      -0.142347,
+      0.045441,
+      0.678151,
+      0.719572
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_45",
+    "body": 33,
+    "body_name": "right_shoulder_yaw_link",
+    "mesh_name": "right_shoulder_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_shoulder_yaw_link.stl",
+    "pos": [
+      0.001646,
+      -0.006902,
+      -0.053329
+    ],
+    "quat": [
+      -0.142347,
+      0.045441,
+      0.678151,
+      0.719572
+    ],
+    "mesh_pos": [
+      0.001646,
+      -0.006902,
+      -0.053329
+    ],
+    "mesh_quat": [
+      -0.142347,
+      0.045441,
+      0.678151,
+      0.719572
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_46",
+    "body": 34,
+    "body_name": "right_elbow_link",
+    "mesh_name": "right_elbow_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_elbow_link.stl",
+    "pos": [
+      0.052278,
+      0.024589,
+      -0.008152
+    ],
+    "quat": [
+      0.615905,
+      0.432849,
+      0.508744,
+      0.41771
+    ],
+    "mesh_pos": [
+      0.052278,
+      0.024589,
+      -0.008152
+    ],
+    "mesh_quat": [
+      0.615905,
+      0.432849,
+      0.508744,
+      0.41771
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_47",
+    "body": 34,
+    "body_name": "right_elbow_link",
+    "mesh_name": "right_elbow_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_elbow_link.stl",
+    "pos": [
+      0.052278,
+      0.024589,
+      -0.008152
+    ],
+    "quat": [
+      0.615905,
+      0.432849,
+      0.508744,
+      0.41771
+    ],
+    "mesh_pos": [
+      0.052278,
+      0.024589,
+      -0.008152
+    ],
+    "mesh_quat": [
+      0.615905,
+      0.432849,
+      0.508744,
+      0.41771
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_48",
+    "body": 35,
+    "body_name": "right_wrist_roll_link",
+    "mesh_name": "right_wrist_roll_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_wrist_roll_link.stl",
+    "pos": [
+      0.034342,
+      -0.00039,
+      0.000129
+    ],
+    "quat": [
+      0.488666,
+      -0.505257,
+      0.514015,
+      0.49164
+    ],
+    "mesh_pos": [
+      0.034342,
+      -0.00039,
+      0.000129
+    ],
+    "mesh_quat": [
+      0.488666,
+      -0.505257,
+      0.514015,
+      0.49164
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_49",
+    "body": 36,
+    "body_name": "right_wrist_pitch_link",
+    "mesh_name": "right_wrist_pitch_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_wrist_pitch_link.stl",
+    "pos": [
+      0.062572,
+      0.031038,
+      -0.00034
+    ],
+    "quat": [
+      0.728994,
+      0.002476,
+      0.684506,
+      -0.003539
+    ],
+    "mesh_pos": [
+      0.062572,
+      0.031038,
+      -0.00034
+    ],
+    "mesh_quat": [
+      0.728994,
+      0.002476,
+      0.684506,
+      -0.003539
+    ],
+    "rgba": [
+      0.7,
+      0.7,
+      0.7,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_50",
+    "body": 37,
+    "body_name": "right_wrist_yaw_link",
+    "mesh_name": "right_wrist_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_wrist_yaw_link.stl",
+    "pos": [
+      0.015963,
+      -1.3e-05,
+      0.0002
+    ],
+    "quat": [
+      -0.000255,
+      -0.000152,
+      0.706778,
+      0.707436
+    ],
+    "mesh_pos": [
+      0.015963,
+      -1.3e-05,
+      0.0002
+    ],
+    "mesh_quat": [
+      -0.000255,
+      -0.000152,
+      0.706778,
+      0.707436
+    ],
+    "rgba": [
+      0.4,
+      0.4,
+      0.4,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_51",
+    "body": 37,
+    "body_name": "right_wrist_yaw_link",
+    "mesh_name": "right_wrist_yaw_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_wrist_yaw_link.stl",
+    "pos": [
+      0.015963,
+      -1.3e-05,
+      0.0002
+    ],
+    "quat": [
+      -0.000255,
+      -0.000152,
+      0.706778,
+      0.707436
+    ],
+    "mesh_pos": [
+      0.015963,
+      -1.3e-05,
+      0.0002
+    ],
+    "mesh_quat": [
+      -0.000255,
+      -0.000152,
+      0.706778,
+      0.707436
+    ],
+    "rgba": [
+      0.4,
+      0.4,
+      0.4,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_52",
+    "body": 37,
+    "body_name": "right_wrist_yaw_link",
+    "mesh_name": "right_hand_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_hand_link.stl",
+    "pos": [
+      0.128671,
+      0.007196,
+      0.005872
+    ],
+    "quat": [
+      0.434857,
+      0.537195,
+      0.567709,
+      0.447243
+    ],
+    "mesh_pos": [
+      0.07043,
+      0.007196,
+      0.006045
+    ],
+    "mesh_quat": [
+      0.434857,
+      0.537195,
+      0.567709,
+      0.447243
+    ],
+    "rgba": [
+      0.4,
+      0.4,
+      0.4,
+      1.0
+    ]
+  },
+  {
+    "name": "geom_53",
+    "body": 37,
+    "body_name": "right_wrist_yaw_link",
+    "mesh_name": "right_hand_link",
+    "mesh_url": "/assets/unitree_h2/meshes/right_hand_link.stl",
+    "pos": [
+      0.128671,
+      0.007196,
+      0.005872
+    ],
+    "quat": [
+      0.434857,
+      0.537195,
+      0.567709,
+      0.447243
+    ],
+    "mesh_pos": [
+      0.07043,
+      0.007196,
+      0.006045
+    ],
+    "mesh_quat": [
+      0.434857,
+      0.537195,
+      0.567709,
+      0.447243
+    ],
+    "rgba": [
+      0.4,
+      0.4,
+      0.4,
+      1.0
+    ]
+  }
+]
