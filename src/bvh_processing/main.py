@@ -8,10 +8,12 @@ from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from bvh_processing.api import dev_ui
 from bvh_processing.api.routes import router
-from bvh_processing.config import get_settings
+from bvh_processing.config import Settings, get_settings
 from bvh_processing.errors import BvhServiceError
 
 logger = logging.getLogger(__name__)
@@ -19,20 +21,37 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    settings = get_settings()
+    settings: Settings = app.state.settings
     timeout = httpx.Timeout(settings.download_timeout_seconds)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         app.state.http_client = client
-        yield
+        if settings.dev_ui:
+            dev_ui.announce(settings)
+        try:
+            yield
+        finally:
+            # 未启用自测页面时是空操作。
+            dev_ui.reset_store()
 
 
-def create_app() -> FastAPI:
+def create_app(settings: Settings | None = None) -> FastAPI:
+    resolved_settings = settings or get_settings()
     application = FastAPI(
         title="BVH Processing API",
         version="0.1.0",
         lifespan=lifespan,
     )
+    # lifespan 通过 app.state 取生效配置，保证与依赖注入用的是同一份。
+    application.state.settings = resolved_settings
     application.include_router(router)
+
+    if resolved_settings.dev_ui:
+        application.include_router(dev_ui.router)
+        application.mount(
+            "/dev/bvh/static",
+            StaticFiles(directory=dev_ui.STATIC_ROOT),
+            name="dev-ui-static",
+        )
 
     @application.exception_handler(BvhServiceError)
     async def handle_service_error(

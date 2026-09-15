@@ -52,6 +52,17 @@ class Settings(BaseSettings):
     mdm_seed: int = Field(default=10, ge=0, le=2147483647)
     mdm_source_scale: float = Field(default=0.01, ge=0.00001, le=10)
     mdm_source_up_axis: Literal["Y", "Z"] = "Y"
+    dev_ui: bool = Field(
+        default=False,
+        description=(
+            "是否挂载本地自测页面 /dev/bvh（上传 BVH → 调用 /api/v1/bvh/process "
+            "→ three.js 预览处理结果）。仅本地联调开启，需单 worker 运行。"
+        ),
+    )
+    dev_ui_open_browser: bool = Field(
+        default=False,
+        description="启动时是否自动用系统浏览器打开自测页面；配合 --reload 会每次重载都打开。",
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="BVH_",

@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BVH 处理自测台</title>
+<style>
+  :root {
+    --bg: #0b0e13;
+    --panel: #131820;
+    --panel-2: #1a212b;
+    --line: #263040;
+    --text: #dbe4ef;
+    --muted: #8b9bb0;
+    --accent: #4da3ff;
+    --ok: #3ddc97;
+    --warn: #ffb454;
+    --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    flex: none;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .hint { color: var(--muted); font-size: 12px; }
+  header .spacer { flex: 1; }
+  .pill {
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .pill.ok { color: var(--ok); border-color: #1d5b45; }
+  .pill.err { color: var(--err); border-color: #6b2b2b; }
+  .pill.busy { color: var(--warn); border-color: #6b5324; }
+  main {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 340px 1fr 1fr;
+    gap: 10px;
+    padding: 10px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .controls { padding: 12px; gap: 12px; overflow-y: auto; }
+  .view h2 {
+    margin: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .view h2 span { font-weight: 400; color: #5f7086; }
+  .canvas-wrap { flex: 1; min-height: 0; position: relative; }
+  canvas { width: 100%; height: 100%; display: block; }
+  .drop {
+    display: block;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    padding: 18px 12px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    word-break: break-all;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: #16202c; color: var(--text); }
+  .drop input { display: none; }
+  fieldset {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px 10px;
+    margin: 0;
+  }
+  legend { color: var(--muted); font-size: 12px; padding: 0 4px; }
+  fieldset label { display: block; padding: 3px 0; cursor: pointer; }
+  fieldset input { margin-right: 6px; }
+  .row { display: flex; gap: 8px; }
+  button {
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button.primary { background: #1d4b7a; border-color: #2b6ca8; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .transport {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    flex: none;
+  }
+  .transport button { flex: none; width: 72px; padding: 5px 8px; }
+  .transport input[type="range"] {
+    flex: 1;
+    min-width: 120px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .transport .readout {
+    font: 12px/1.4 ui-monospace, Consolas, monospace;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .transport .toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  dl.meta { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 12px; }
+  dl.meta dt { color: var(--muted); white-space: nowrap; }
+  dl.meta dd { margin: 0; word-break: break-all; font-family: ui-monospace, Consolas, monospace; }
+  details { border-top: 1px solid var(--line); padding-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  pre#log {
+    margin: 8px 0 0;
+    max-height: 240px;
+    overflow: auto;
+    font: 11px/1.55 ui-monospace, Consolas, monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #a9b8cc;
+    background: #0d1219;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px;
+  }
+  pre#log .ok { color: var(--ok); }
+  pre#log .err { color: var(--err); }
+  pre#log .info { color: var(--accent); }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-top: 1px solid var(--line);
+    padding-top: 8px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  button.link {
+    flex: none;
+    padding: 2px 6px;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font-size: 12px;
+  }
+  #exchanges { display: flex; flex-direction: column; gap: 8px; }
+  #exchanges .empty { margin: 0; color: #5f7086; font-size: 12px; }
+  details.exchange {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #0d1219;
+    overflow: hidden;
+  }
+  details.exchange > summary {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    padding: 6px 8px;
+    background: var(--panel-2);
+    cursor: pointer;
+    font-size: 12px;
+  }
+  details.exchange > summary::marker { color: var(--muted); }
+  details.exchange .method { color: var(--accent); font-weight: 600; }
+  details.exchange .path { font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+  details.exchange .status {
+    margin-left: auto;
+    font-family: ui-monospace, Consolas, monospace;
+    white-space: nowrap;
+  }
+  details.exchange .status.ok { color: var(--ok); }
+  details.exchange .status.err { color: var(--err); }
+  details.exchange .note {
+    padding: 6px 8px 0;
+    color: #5f7086;
+    font-size: 11.5px;
+  }
+  details.exchange .block { padding: 6px 8px; }
+  details.exchange .block-label {
+    color: var(--muted);
+    font-size: 11px;
+    margin-bottom: 3px;
+  }
+  details.exchange dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: minmax(76px, auto) 1fr;
+    gap: 2px 8px;
+    font: 11.5px/1.5 ui-monospace, Consolas, monospace;
+  }
+  details.exchange dt { color: var(--muted); word-break: break-all; }
+  details.exchange dd {
+    margin: 0;
+    word-break: break-all;
+    user-select: text;
+  }
+  details.exchange .j-string { color: #8fd6a0; }
+  details.exchange .j-number { color: var(--warn); }
+  details.exchange .j-boolean { color: var(--accent); }
+  details.exchange .j-array { color: #c9a2ff; }
+  details.exchange .j-null { color: var(--muted); }
+  details.exchange .actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 8px 6px;
+  }
+  details.exchange .actions button { flex: none; font-size: 11px; padding: 2px 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>BVH 处理自测台</h1>
+  <span class="hint">上传 → <code>/api/v1/bvh/process</code> → 回调取结果 → three.js 预览</span>
+  <span class="spacer"></span>
+  <span class="pill" id="statusPill">未开始</span>
+</header>
+
+<main>
+  <section class="panel controls">
+    <label class="drop" id="drop">
+      <input type="file" id="fileInput" accept=".bvh">
+      <span id="dropText">点击选择或拖拽 .bvh 文件到此处</span>
+    </label>
+
+    <fieldset>
+      <legend>handleOptions（按勾选升序下发）</legend>
+      <label><input type="checkbox" name="opt" value="1" checked> 1 整体去噪</label>
+      <label><input type="checkbox" name="opt" value="2" checked> 2 整体平滑与补帧</label>
+      <label><input type="checkbox" name="opt" value="3"> 3 脚步锁定校正</label>
+      <label><input type="checkbox" name="opt" value="4"> 4 循环优化（首尾自然过渡）</label>
+    </fieldset>
+
+    <div class="row">
+      <button class="primary" id="runBtn" disabled>上传并调用接口</button>
+    </div>
+    <div class="row">
+      <button id="downloadBtn" disabled>下载处理结果</button>
+      <button id="clearBtn">清空结果</button>
+    </div>
+
+    <dl class="meta" id="meta"></dl>
+
+    <section>
+      <div class="section-head">
+        <span>接口报文</span>
+        <button type="button" class="link" id="clearExchanges">清空</button>
+      </div>
+      <div id="exchanges"><p class="empty">还没有调用过接口</p></div>
+    </section>
+
+    <details open>
+      <summary>执行日志</summary>
+      <pre id="log"></pre>
+    </details>
+  </section>
+
+  <section class="panel view">
+    <h2>原始 BVH <span id="sourceInfo"></span></h2>
+    <div class="canvas-wrap"><canvas id="canvasSource"></canvas></div>
+  </section>
+
+  <section class="panel view">
+    <h2>处理结果 <span id="resultInfo"></span></h2>
+    <div class="canvas-wrap"><canvas id="canvasResult"></canvas></div>
+  </section>
+</main>
+
+<div class="transport">
+  <button id="playBtn">暂停</button>
+  <input type="range" id="timeline" min="0" max="1000" step="1" value="0"
+         aria-label="播放进度（同时控制两个预览窗口）">
+  <span class="readout" id="readout">进度 0%</span>
+  <label class="toggle">
+    <input type="checkbox" id="syncCam" checked> 同步视角
+  </label>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "/dev/bvh/static/three.module.min.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { BVHLoader } from '/dev/bvh/static/BVHLoader.js';
+import { OrbitControls } from '/dev/bvh/static/OrbitControls.js';
+
+const loader = new BVHLoader();
+
+// ---------------------------------------------------------------- 工具函数
+
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function newTaskId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  // 非安全上下文（例如用局域网 IP 打开）没有 randomUUID。
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function logLine(text, kind = '') {
+  const pre = $('log');
+  const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  const line = document.createElement('span');
+  line.className = kind;
+  line.textContent = `[${time}] ${text}\n`;
+  pre.appendChild(line);
+  pre.scrollTop = pre.scrollHeight;
+}
+
+function setStatus(text, kind = '') {
+  const pill = $('statusPill');
+  pill.textContent = text;
+  pill.className = `pill ${kind}`;
+}
+
+function setMeta(entries) {
+  const dl = $('meta');
+  dl.textContent = '';
+  for (const [key, value] of entries) {
+    if (value === undefined || value === null || value === '') continue;
+    const dt = document.createElement('dt');
+    dt.textContent = key;
+    const dd = document.createElement('dd');
+    dd.textContent = String(value);
+    dl.append(dt, dd);
+  }
+}
+
+async function errorText(response) {
+  const raw = await response.text();
+  try {
+    const body = JSON.parse(raw);
+    return body.message || body.detail || raw;
+  } catch {
+    return raw || `HTTP ${response.status}`;
+  }
+}
+
+// ---------------------------------------------------------------- 接口报文
+
+const exchanges = $('exchanges');
+
+function primitiveText(value) {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'string') return JSON.stringify(value);
+  return String(value);
+}
+
+function primitiveClass(value) {
+  if (typeof value === 'string') return 'j-string';
+  if (typeof value === 'number') return 'j-number';
+  if (typeof value === 'boolean') return 'j-boolean';
+  return 'j-null';
+}
+
+function jsonValueNode(value) {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    return jsonObjectNode(value);
+  }
+  const span = document.createElement('span');
+  if (Array.isArray(value)) {
+    if (value.some((item) => item !== null && typeof item === 'object')) {
+      const wrap = document.createElement('div');
+      value.forEach((item, index) => {
+        const head = document.createElement('div');
+        head.className = 'block-label';
+        head.textContent = `[${index}]`;
+        wrap.append(head, jsonObjectNode(item));
+      });
+      return wrap;
+    }
+    span.className = 'j-array';
+    span.textContent = `[${value.map(primitiveText).join(', ')}]`;
+    return span;
+  }
+  span.className = primitiveClass(value);
+  span.textContent = primitiveText(value);
+  return span;
+}
+
+function jsonObjectNode(object) {
+  const list = document.createElement('dl');
+  for (const [key, value] of Object.entries(object)) {
+    const dt = document.createElement('dt');
+    dt.textContent = key;
+    const dd = document.createElement('dd');
+    dd.appendChild(jsonValueNode(value));
+    list.append(dt, dd);
+  }
+  return list;
+}
+
+function labelledBlock(label, node) {
+  const box = document.createElement('div');
+  box.className = 'block';
+  const head = document.createElement('div');
+  head.className = 'block-label';
+  head.textContent = label;
+  box.append(head, node);
+  return box;
+}
+
+async function copyJson(button, data) {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    button.textContent = '已复制';
+  } catch {
+    button.textContent = '复制失败';
+  }
+  setTimeout(() => {
+    button.textContent = '复制 JSON';
+  }, 1200);
+}
+
+/** 把一次接口调用渲染成可折叠卡片：请求参数 + 响应，都是结构化 JSON。 */
+function addExchange({ method, path, status, statusKind = '', note, sections, copyValue }) {
+  exchanges.querySelector('.empty')?.remove();
+
+  const card = document.createElement('details');
+  card.className = 'exchange';
+  card.open = true;
+
+  const summary = document.createElement('summary');
+  const methodNode = document.createElement('span');
+  methodNode.className = 'method';
+  methodNode.textContent = method;
+  const pathNode = document.createElement('span');
+  pathNode.className = 'path';
+  pathNode.textContent = path;
+  summary.append(methodNode, pathNode);
+  if (status !== undefined) {
+    const statusNode = document.createElement('span');
+    statusNode.className = `status ${statusKind}`;
+    statusNode.textContent = String(status);
+    summary.appendChild(statusNode);
+  }
+  card.appendChild(summary);
+
+  if (note) {
+    const noteNode = document.createElement('div');
+    noteNode.className = 'note';
+    noteNode.textContent = note;
+    card.appendChild(noteNode);
+  }
+  for (const { label, value } of sections) {
+    card.appendChild(labelledBlock(label, jsonObjectNode(value)));
+  }
+
+  if (copyValue !== undefined) {
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = '复制 JSON';
+    button.addEventListener('click', () => copyJson(button, copyValue));
+    actions.appendChild(button);
+    card.appendChild(actions);
+  }
+
+  exchanges.appendChild(card);
+  // 左栏内容较长，新卡片可能在折叠区外，滚一下让请求参数立刻可见。
+  card.scrollIntoView({ block: 'nearest' });
+}
+
+function clearExchanges() {
+  exchanges.textContent = '';
+  const empty = document.createElement('p');
+  empty.className = 'empty';
+  empty.textContent = '还没有调用过接口';
+  exchanges.appendChild(empty);
+}
+
+$('clearExchanges').addEventListener('click', clearExchanges);
+
+// ---------------------------------------------------------------- three.js 预览
+
+function createViewer(canvas, boneColor, jointColor, onInteract) {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0f1319);
+
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100000);
+  camera.position.set(1.6, 1.2, 2.4);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+
+  // 用户一动某个窗口就把它当作视角源，另一个窗口跟随，这样两边都能拖。
+  canvas.addEventListener('pointerdown', onInteract);
+  canvas.addEventListener('wheel', onInteract, { passive: true });
+
+  let grid = null;
+  let axisGroup = null;
+  let root = null;
+  let helper = null;
+  let jointGroup = null;
+  let mixer = null;
+  let clipDuration = 0;
+  let bones = [];
+  let markers = [];
+  // 复用的视图快照，避免每帧给相机同步分配新对象。
+  const view = {
+    position: new THREE.Vector3(),
+    quaternion: new THREE.Quaternion(),
+    up: new THREE.Vector3(),
+    target: new THREE.Vector3(),
+  };
+
+  function disposeTree(object) {
+    object.traverse((node) => {
+      if (node.geometry) node.geometry.dispose();
+      const material = node.material;
+      if (!material) return;
+      for (const item of Array.isArray(material) ? material : [material]) {
+        // 坐标轴标签是贴了 canvas 贴图的 Sprite，贴图也要一起释放。
+        if (item.map) item.map.dispose();
+        item.dispose();
+      }
+    });
+  }
+
+  function clear() {
+    for (const object of [root, helper, grid, jointGroup, axisGroup]) {
+      if (!object) continue;
+      scene.remove(object);
+      disposeTree(object);
+    }
+    root = helper = grid = jointGroup = axisGroup = mixer = null;
+    clipDuration = 0;
+    bones = [];
+    markers = [];
+  }
+
+  /** 生成 X/Y/Z 文字标签，Sprite 始终朝向相机。 */
+  function makeAxisLabel(text, color, size) {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 64;
+    const context = canvas.getContext('2d');
+    context.fillStyle = color;
+    context.font = 'bold 46px system-ui, "PingFang SC", sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(text, 32, 34);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }),
+    );
+    sprite.scale.setScalar(size);
+    return sprite;
+  }
+
+  function collectBones(object) {
+    const found = [];
+    object.traverse((node) => {
+      if (node.isBone) found.push(node);
+    });
+    return found;
+  }
+
+  function measure(boundingRoot, clip, boundingBones) {
+    const probe = new THREE.AnimationMixer(boundingRoot);
+    probe.clipAction(clip).play();
+    const box = new THREE.Box3();
+    const point = new THREE.Vector3();
+    const samples = 24;
+    for (let index = 0; index <= samples; index += 1) {
+      probe.setTime(clip.duration * (index / samples));
+      boundingRoot.updateMatrixWorld(true);
+      for (const bone of boundingBones) {
+        box.expandByPoint(point.setFromMatrixPosition(bone.matrixWorld));
+      }
+    }
+    probe.stopAllAction();
+    probe.uncacheClip(clip);
+    if (box.isEmpty()) {
+      box.setFromCenterAndSize(new THREE.Vector3(), new THREE.Vector3(1, 1, 1));
+    }
+    return box;
+  }
+
+  function load(text) {
+    clear();
+    const parsed = loader.parse(text);
+    root = parsed.skeleton.bones[0];
+    bones = collectBones(root);
+    if (bones.length === 0) throw new Error('BVH 中没有解析到骨骼关节');
+
+    helper = new THREE.SkeletonHelper(root);
+    helper.material.color = new THREE.Color(boneColor);
+    scene.add(root, helper);
+
+    mixer = new THREE.AnimationMixer(root);
+    mixer.clipAction(parsed.clip).play();
+    clipDuration = parsed.clip.duration;
+
+    const box = measure(root, parsed.clip, bones);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const radius = Math.max(size.x, size.y, size.z, 1e-6) * 0.5;
+
+    const jointRadius = radius * 0.022;
+    jointGroup = new THREE.Group();
+    const sphere = new THREE.SphereGeometry(jointRadius, 8, 6);
+    const material = new THREE.MeshBasicMaterial({ color: jointColor });
+    markers = bones.map(() => {
+      const marker = new THREE.Mesh(sphere, material);
+      jointGroup.add(marker);
+      return marker;
+    });
+    scene.add(jointGroup);
+
+    camera.near = Math.max(radius / 200, 1e-4);
+    camera.far = radius * 400;
+    camera.updateProjectionMatrix();
+    camera.position.set(
+      center.x + radius * 2.0,
+      center.y + radius * 0.35,
+      center.z + radius * 2.0,
+    );
+    controls.target.copy(center);
+    controls.minDistance = radius * 0.1;
+    controls.maxDistance = radius * 40;
+    controls.update();
+
+    grid = new THREE.GridHelper(radius * 2, 10, 0x334155, 0x1f2937);
+    grid.position.set(center.x, box.min.y, center.z);
+    scene.add(grid);
+
+    // 地面原点上的 XYZ 参考轴：X 红、Y 绿（向上）、Z 蓝
+    const axisLength = radius * 0.5;
+    axisGroup = new THREE.Group();
+    axisGroup.position.set(0, box.min.y, 0);
+    axisGroup.add(new THREE.AxesHelper(axisLength));
+    const labelSize = radius * 0.16;
+    const labels = [
+      ['X', '#ff4d4d', [axisLength * 1.25, 0, 0]],
+      ['Y', '#4dff4d', [0, axisLength * 1.25, 0]],
+      ['Z', '#4d9dff', [0, 0, axisLength * 1.25]],
+    ];
+    for (const [text, color, position] of labels) {
+      const label = makeAxisLabel(text, color, labelSize);
+      label.position.set(position[0], position[1], position[2]);
+      axisGroup.add(label);
+    }
+    scene.add(axisGroup);
+
+    return { duration: parsed.clip.duration, bones: bones.length };
+  }
+
+  function resize() {
+    const width = canvas.clientWidth || 1;
+    const height = canvas.clientHeight || 1;
+    const size = new THREE.Vector2();
+    renderer.getSize(size);
+    if (size.x === width && size.y === height) return;
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  }
+
+  /** 用归一化进度（0~1）定位动画，两个窗口因此永远在同一相对位置。 */
+  function setProgress(progress) {
+    if (!mixer || clipDuration <= 0) return;
+    mixer.setTime(Math.min(Math.max(progress, 0), 1) * clipDuration);
+  }
+
+  function updateControls() {
+    controls.update();
+  }
+
+  /** 只做纯拷贝，不跑自身 controls.update()，避免阻尼把跟随结果再改一次。 */
+  function readView() {
+    return {
+      position: view.position.copy(camera.position),
+      quaternion: view.quaternion.copy(camera.quaternion),
+      up: view.up.copy(camera.up),
+      target: view.target.copy(controls.target),
+    };
+  }
+
+  function applyView(other) {
+    camera.position.copy(other.position);
+    camera.quaternion.copy(other.quaternion);
+    camera.up.copy(other.up);
+    controls.target.copy(other.target);
+  }
+
+  function render() {
+    resize();
+    // 先把骨骼矩阵推到最新姿势，骨架线和关节球才不会差一帧（拖动进度条时尤其明显）。
+    scene.updateMatrixWorld(true);
+    for (let index = 0; index < bones.length; index += 1) {
+      markers[index].position.setFromMatrixPosition(bones[index].matrixWorld);
+    }
+    renderer.render(scene, camera);
+  }
+
+  return {
+    load,
+    clear,
+    setProgress,
+    updateControls,
+    readView,
+    applyView,
+    render,
+    get duration() {
+      return clipDuration;
+    },
+    get hasClip() {
+      return root !== null;
+    },
+  };
+}
+
+let activeViewer = null;
+const sourceViewer = createViewer($('canvasSource'), 0x6ea8fe, 0x9ecbff, () => {
+  // 空窗口不抢镜头，否则点一下空白面板就会把有动作的那边带偏。
+  if (sourceViewer.hasClip) activeViewer = sourceViewer;
+});
+const resultViewer = createViewer($('canvasResult'), 0x3ddc97, 0xa8f0cd, () => {
+  if (resultViewer.hasClip) activeViewer = resultViewer;
+});
+activeViewer = sourceViewer;
+
+const clock = new THREE.Clock();
+const timeline = $('timeline');
+const syncToggle = $('syncCam');
+let playing = true;
+let progress = 0;
+let scrubbing = false;
+let resumeAfterScrub = false;
+let lastReadoutAt = 0;
+
+function updatePlayButton() {
+  $('playBtn').textContent = playing ? '暂停' : '播放';
+}
+
+function currentTimes() {
+  return {
+    source: progress * sourceViewer.duration,
+    result: progress * resultViewer.duration,
+  };
+}
+
+function updateReadout() {
+  const { source, result } = currentTimes();
+  const parts = [`进度 ${Math.round(progress * 100)}%`];
+  if (sourceViewer.hasClip) parts.push(`原始 ${source.toFixed(2)}s`);
+  if (resultViewer.hasClip) parts.push(`结果 ${result.toFixed(2)}s`);
+  $('readout').textContent = parts.join(' · ');
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = Math.min(clock.getDelta(), 0.1);
+
+  // 以较长的那条动作作为基准，让两边同时走完，方便逐帧对照。
+  const reference = Math.max(sourceViewer.duration, resultViewer.duration);
+  if (playing && reference > 0) {
+    progress = (progress + delta / reference) % 1;
+  }
+  sourceViewer.setProgress(progress);
+  resultViewer.setProgress(progress);
+  if (!scrubbing) timeline.value = String(Math.round(progress * 1000));
+
+  if (syncToggle.checked) {
+    const follower = activeViewer === sourceViewer ? resultViewer : sourceViewer;
+    activeViewer.updateControls();
+    // 先让跟随窗口收敛自身残余阻尼，再被源窗口视图覆盖。
+    follower.updateControls();
+    follower.applyView(activeViewer.readView());
+    activeViewer.render();
+    follower.render();
+  } else {
+    sourceViewer.updateControls();
+    resultViewer.updateControls();
+    sourceViewer.render();
+    resultViewer.render();
+  }
+
+  if (!scrubbing && performance.now() - lastReadoutAt > 100) {
+    lastReadoutAt = performance.now();
+    updateReadout();
+  }
+}
+animate();
+
+$('playBtn').addEventListener('click', () => {
+  playing = !playing;
+  updatePlayButton();
+});
+
+timeline.addEventListener('input', () => {
+  progress = Number(timeline.value) / 1000;
+  updateReadout();
+});
+
+// 拖动时暂停播放，松手后恢复到拖动前的状态。
+timeline.addEventListener('pointerdown', () => {
+  scrubbing = true;
+  resumeAfterScrub = playing;
+  playing = false;
+  updatePlayButton();
+});
+
+window.addEventListener('pointerup', endScrub);
+window.addEventListener('pointercancel', endScrub);
+
+function endScrub() {
+  if (!scrubbing) return;
+  scrubbing = false;
+  playing = resumeAfterScrub;
+  updatePlayButton();
+}
+
+// ---------------------------------------------------------------- 交互与流程
+
+let selectedFile = null;
+let resultUrl = null;
+let busy = false;
+
+function selectedOptions() {
+  return [...document.querySelectorAll('input[name="opt"]:checked')]
+    .map((input) => Number(input.value))
+    .sort((a, b) => a - b);
+}
+
+function refreshButtons() {
+  $('runBtn').disabled = busy || selectedFile === null;
+  $('downloadBtn').disabled = busy || resultUrl === null;
+}
+
+function previewSource(text, label) {
+  try {
+    const info = sourceViewer.load(text);
+    $('sourceInfo').textContent =
+      `${label} · ${info.bones} 关节 · ${info.duration.toFixed(3)}s`;
+    return info;
+  } catch (error) {
+    $('sourceInfo').textContent = '解析失败';
+    logLine(`原始 BVH 解析失败：${error.message}`, 'err');
+    return null;
+  }
+}
+
+$('fileInput').addEventListener('change', (event) => {
+  const file = event.target.files[0];
+  if (file) handleFile(file);
+});
+
+const drop = $('drop');
+for (const type of ['dragenter', 'dragover']) {
+  drop.addEventListener(type, (event) => {
+    event.preventDefault();
+    drop.classList.add('over');
+  });
+}
+for (const type of ['dragleave', 'drop']) {
+  drop.addEventListener(type, () => drop.classList.remove('over'));
+}
+drop.addEventListener('drop', (event) => {
+  event.preventDefault();
+  const file = event.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+async function handleFile(file) {
+  selectedFile = file;
+  resultUrl = null;
+  resultViewer.clear();
+  clearExchanges();
+  $('dropText').textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+  $('resultInfo').textContent = '';
+  $('sourceInfo').textContent = '解析中…';
+  setStatus('已选择文件', '');
+  setMeta([
+    ['文件名', file.name],
+    ['本地大小', `${file.size} B`],
+  ]);
+  logLine(`选择文件 ${file.name}（${file.size} B）`, 'info');
+
+  const text = await file.text();
+  previewSource(text, '本地文件');
+  refreshButtons();
+}
+
+$('clearBtn').addEventListener('click', () => {
+  resultUrl = null;
+  resultViewer.clear();
+  $('downloadBtn').disabled = true;
+  $('resultInfo').textContent = '';
+  setStatus('未开始', '');
+  updateReadout();
+  logLine('已清空处理结果');
+});
+
+$('runBtn').addEventListener('click', () => {
+  run().catch((error) => {
+    busy = false;
+    refreshButtons();
+    setStatus('失败', 'err');
+    logLine(`处理失败：${error.message}`, 'err');
+  });
+});
+
+async function run() {
+  if (!selectedFile || busy) return;
+  const options = selectedOptions();
+  if (options.length === 0) {
+    setStatus('未选择处理选项', 'err');
+    return;
+  }
+
+  busy = true;
+  refreshButtons();
+  setStatus('上传中…', 'busy');
+
+  // 1) 暂存上传文件，拿到 originalFileUrl 与 SHA-256
+  const form = new FormData();
+  form.append('file', selectedFile, selectedFile.name);
+  const uploadResponse = await fetch('/api/v1/dev/bvh/uploads', {
+    method: 'POST',
+    body: form,
+  });
+  if (!uploadResponse.ok) {
+    throw new Error(`上传失败：${await errorText(uploadResponse)}`);
+  }
+  const upload = await uploadResponse.json();
+  logLine(`已暂存：${upload.sourcePath}（${upload.size} B）`, 'info');
+  logLine(`SHA-256：${upload.sha256}`, 'info');
+  addExchange({
+    method: 'POST',
+    path: '/api/v1/dev/bvh/uploads',
+    status: uploadResponse.status,
+    statusKind: 'ok',
+    note: '自测端点：先把文件暂存成可下载地址，供 /process 回源下载',
+    sections: [
+      { label: '上传文件（multipart/form-data）', value: { file: selectedFile.name, size: selectedFile.size } },
+      { label: '响应', value: upload },
+    ],
+    copyValue: upload,
+  });
+
+  // 2) 调用真实处理接口，回调指向本页面的自测接收端
+  const origin = window.location.origin;
+  const devTaskId = newTaskId();
+  const payload = {
+    actionId: `dev-ui-${Date.now()}`,
+    originalFileUrl: origin + upload.sourcePath,
+    originalFileSha256: upload.sha256,
+    handleOptions: options,
+    callbackUrl: `${origin}/api/v1/dev/bvh/callback/${devTaskId}`,
+  };
+  setStatus('处理中…', 'busy');
+  logLine('POST /api/v1/bvh/process（请求参数见上方“接口报文”）', 'info');
+
+  const processResponse = await fetch('/api/v1/bvh/process', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!processResponse.ok) {
+    throw new Error(`接口返回错误：${await errorText(processResponse)}`);
+  }
+  const accepted = await processResponse.json();
+  logLine(
+    `接口已接收：taskId=${accepted.taskId}，等待回调 ${devTaskId}`,
+    'info',
+  );
+  addExchange({
+    method: 'POST',
+    path: '/api/v1/bvh/process',
+    status: processResponse.status,
+    statusKind: 'ok',
+    sections: [
+      { label: '请求参数（JSON body）', value: payload },
+      { label: '响应', value: accepted },
+    ],
+    copyValue: payload,
+  });
+  setMeta([
+    ['文件名', selectedFile.name],
+    ['接口 taskId', accepted.taskId],
+    ['自测 taskId', devTaskId],
+    ['handleOptions', options.join(', ')],
+    ['SHA-256', upload.sha256],
+  ]);
+
+  // 3) 轮询自测状态，直到收到结果回调
+  const task = await pollTask(devTaskId, 180000);
+  if (task.status !== 'succeeded') {
+    throw new Error(task.message || '处理未成功');
+  }
+
+  // 4) 取回处理结果并预览
+  const resultResponse = await fetch(task.result.url, { cache: 'no-store' });
+  if (!resultResponse.ok) {
+    throw new Error(`下载结果失败：${await errorText(resultResponse)}`);
+  }
+  const resultText = await resultResponse.text();
+  const info = resultViewer.load(resultText);
+  resultUrl = task.result.url;
+  $('resultInfo').textContent =
+    `${task.result.filename} · ${info.bones} 关节 · ${info.duration.toFixed(3)}s`;
+  updateReadout();
+
+  busy = false;
+  refreshButtons();
+  setStatus('处理成功', 'ok');
+  logLine(
+    `处理成功：${task.result.filename}（${task.result.size} B，${info.bones} 关节）`,
+    'ok',
+  );
+}
+
+async function pollTask(taskId, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let lastMessage = '';
+  while (Date.now() < deadline) {
+    const response = await fetch(`/api/v1/dev/bvh/tasks/${taskId}`, {
+      cache: 'no-store',
+    });
+    if (response.ok) {
+      const task = await response.json();
+      for (const item of task.progress) {
+        const line = `步骤 ${item.step} ${item.stepCode || ''} ${item.progress}% ${item.message || ''}`;
+        if (line !== lastMessage) {
+          logLine(line);
+          lastMessage = line;
+        }
+      }
+      if (task.progress.length > 0) {
+        setStatus(`处理中… ${task.progress.at(-1).progress}%`, 'busy');
+      }
+      if (task.status === 'succeeded' || task.status === 'failed') return task;
+    }
+    await sleep(500);
+  }
+  throw new Error('等待处理结果超时（180s）');
+}
+
+refreshButtons();
+logLine('就绪。选择 .bvh 文件后会先本地预览，再点“上传并调用接口”。', 'info');
+</script>
+</body>
+</html>

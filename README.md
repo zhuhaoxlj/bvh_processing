@@ -43,6 +43,64 @@ MDM 模型会在第一个非零过渡任务中延迟加载并驻留显存。服�
 - Swagger 文档：`http://127.0.0.1:9001/docs`
 - 健康检查：`http://127.0.0.1:9001/health`
 
+## 本地自测页面（BVH_DEV_UI）
+
+本地联调时可以打开一个自带的前端页面：上传 BVH、勾选 `handleOptions`、调用真实的
+`POST /api/v1/bvh/process`，再用 three.js 并排预览原始动作和处理结果。
+
+在本地 `.env` 里开启：
+
+```bash
+BVH_DEV_UI=1
+# 可选：启动后自动用系统浏览器打开页面
+BVH_DEV_UI_OPEN_BROWSER=1
+```
+
+然后用原来的命令启动：
+
+```bash
+uv run uvicorn bvh_processing.main:app --host 0.0.0.0 --port 9001
+```
+
+启动日志会直接打印可点击的页面地址（`--host 0.0.0.0` 会显示成 `127.0.0.1`）：
+
+```text
+本地自测页面已启用：http://127.0.0.1:9001/dev/bvh（仅供联调，请勿在生产环境开启，且需单 worker 运行）
+```
+
+直接访问根路径 `http://127.0.0.1:9001/` 也会 302 跳到 `/dev/bvh`，所以只记住端口即可。
+页面流程与业务侧完全一致：
+
+1. 上传的 BVH 先被暂存为临时下载地址（`/api/v1/dev/bvh/uploads/{token}/{文件名}`）；
+2. 页面用该地址、服务端返回的 SHA-256 和自测回调地址调用 `/api/v1/bvh/process`；
+3. 接口的进度回调打到 `/api/v1/dev/bvh/progress-callback/{taskId}`，最终结果打到
+   `/api/v1/dev/bvh/callback/{taskId}`，页面轮询 `/api/v1/dev/bvh/tasks/{taskId}` 展示进度；
+4. 处理完成后页面取回 `*_processed.bvh` 并渲染骨架。
+
+页面顶部的工具条用于对比：
+
+- **共享进度条**：拖动（或点播放/暂停）会同时定位两个窗口的动画，按各自时长的
+  同一百分比对齐，两边总是停在同一相对位置；右侧读数给出一致的百分比和各自的绝对时间。
+  拖动时自动暂停，松手后恢复原来的播放状态。
+- **同步视角**：默认勾选。旋转/缩放任意一个窗口，另一个窗口跟着走到同一机位，
+  方便叠着对比；取消勾选后两个窗口各自独立观察。
+- **地面 XYZ 参考轴**：画在世界原点、地表高度上，X 红、Y 绿（向上）、Z 蓝，
+  两个窗口位置一致，用于确认朝向和相对位移。
+- **接口报文**：每次调用后端都会生成一张卡片，把请求参数和响应渲染成结构化的
+  JSON 键值表（按类型着色、长 URL 自动换行），可折叠、可一键复制 JSON，
+  不用再去日志里读一整行 `JSON.stringify`。
+
+相关说明：
+
+- 自测端点全部位于 `/api/v1/dev/bvh/*`，只在 `BVH_DEV_UI=1` 时挂载，请勿在生产开启。
+- 服务需以单 worker 运行（uvicorn 默认即是），状态保存在进程内存与临时目录中，
+  进程退出时自动清理。
+- 开启后会自动把访问用的主机（如 `127.0.0.1`）并入 `BVH_MINIO_ALLOWED_HOSTS` 和
+  `BVH_CALLBACK_ALLOWED_HOSTS`，这样即使 `.env` 里配置了生产白名单也能本地自测。
+- 前端依赖（three.js r160、BVHLoader、OrbitControls）已随包内置，无需外网。
+- `BVH_DEV_UI_OPEN_BROWSER=1` 会用 `webbrowser` 拉起系统浏览器；配合 `--reload` 时
+  每次改动重载都会再开一次标签页，那种场景建议保持 `0`。
+
 ## 提交处理任务
 
 ### `POST /api/v1/bvh/process`
@@ -376,6 +434,8 @@ message=<具体失败原因>
 - `BVH_TRAIN_COMMAND`：训练程序入口命令，例如
   `python /opt/robot-training/train.py`。
 - `BVH_TRAIN_TIMEOUT_SECONDS`：单次训练最长执行秒数，默认 `3600`。
+- `BVH_DEV_UI`：是否挂载本地自测页面 `/dev/bvh`，默认 `0`（关闭）；仅本地联调开启。
+- `BVH_DEV_UI_OPEN_BROWSER`：启动时是否自动用系统浏览器打开自测页面，默认 `0`（关闭）。
 
 白名单为空时允许任意 HTTP/HTTPS 主机，仅适合本地联调；生产环境必须同时配置 MinIO 和回调主机白名单。
 
