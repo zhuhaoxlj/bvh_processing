@@ -8,6 +8,8 @@
 
 - Python 3.12（`uv sync` 会依据 `.python-version` 自动准备）
 - uv
+- Linux 与支持 CUDA 12.8 的 NVIDIA 驱动；MDM 生产推理使用 CUDA 版 PyTorch
+- Git LFS（克隆后需确保 `git lfs pull` 已取得 MDM 和 DistilBERT 权重）
 
 ## 安装与启动
 
@@ -31,6 +33,10 @@ uv run bvh-processing \
   --host 0.0.0.0 \
   --port 9001
 ```
+
+MDM 模型会在第一个非零过渡任务中延迟加载并驻留显存。服务应保持 Uvicorn
+默认的单 worker；多 worker 会让每个进程分别加载一份模型。进程内 CUDA 调用
+无法被线程超时强制终止，驱动或采样异常卡死时需要重启服务进程。
 
 启动后可访问：
 

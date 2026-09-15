@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import BinaryIO
 
 from bvh_processing.vendor.mdm.workbench.bvh_export import (
     append_bvh_without_transition,
@@ -18,7 +19,11 @@ GUIDANCE_PARAM = 2.5
 @dataclass(frozen=True)
 class BvhClip:
     filename: str
-    content: bytes
+    content: BinaryIO
+
+    def read(self) -> bytes:
+        self.content.seek(0)
+        return self.content.read()
 
 
 def merge_bvh_clips(
@@ -34,11 +39,11 @@ def merge_bvh_clips(
         raise ValueError("BVH 文件数量与过渡时长数量不匹配")
 
     assets = None
-    current = clips[0].content
+    current = clips[0].read()
     for index, (clip, seconds) in enumerate(
         zip(clips[1:], transition_seconds, strict=True)
     ):
-        following = clip.content
+        following = clip.read()
         if seconds == 0:
             current = append_bvh_without_transition(current, following)
             continue

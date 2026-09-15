@@ -38,10 +38,10 @@ def generate_mdm_merge(
     if len(intervals_seconds) != len(downloaded_files) - 1:
         raise ValueError("BVH 文件数量与过渡时长数量不匹配")
 
-    clips = []
-    for downloaded in downloaded_files:
-        downloaded.content.seek(0)
-        clips.append(BvhClip(downloaded.source_filename, downloaded.content.read()))
+    clips = [
+        BvhClip(downloaded.source_filename, downloaded.content)
+        for downloaded in downloaded_files
+    ]
 
     with _MDM_LOCK:
         result = merge_bvh_clips(

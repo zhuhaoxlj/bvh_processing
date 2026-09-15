@@ -31,6 +31,10 @@ MAX_TEXT_LENGTH = 500
 DEFAULT_GUIDANCE_PARAM = 2.5
 MAX_GUIDANCE_PARAM = 5.0
 CHECKPOINT = DEFAULT_RESOURCE_ROOT / "checkpoint/model000600000.pt"
+CHECKPOINT_SIZE = 232_011_477
+CHECKPOINT_SHA256 = "195664bed72143e071acef4c97ac1aa67f8aa00f57fdc691248e98d715356d92"
+TEXT_ENCODER_SIZE = 267_954_768
+TEXT_ENCODER_SHA256 = "5e3f1108e3cb34ee048634875d8482665b65ac713291a7e32396fb18f6ff0063"
 Progress = Callable[[str, int, int], None]
 
 
@@ -171,16 +175,41 @@ class MDMEngine:
             self.text_encoder / "tokenizer.json",
         ]
         missing = [str(path) for path in required if not path.is_file()]
-        return {"available": not missing, "loaded": self.model is not None, "device": str(self.device),
-                "missing": missing, "fps": TARGET_FPS, "max_transition_seconds": MAX_TRANSITION_SECONDS,
+        expected_sizes = {
+            self.checkpoint: CHECKPOINT_SIZE,
+            self.text_encoder / "model.safetensors": TEXT_ENCODER_SIZE,
+        }
+        invalid = [
+            str(path)
+            for path, size in expected_sizes.items()
+            if path.is_file() and path.stat().st_size != size
+        ]
+        return {"available": not missing and not invalid, "loaded": self.model is not None,
+                "device": str(self.device), "missing": missing, "invalid": invalid,
+                "fps": TARGET_FPS, "max_transition_seconds": MAX_TRANSITION_SECONDS,
                 "context_frames": CONTEXT_FRAMES, "checkpoint": self.checkpoint.name}
 
     def _load(self) -> None:
         if self.model is not None:
             return
-        missing = self.status()["missing"]
-        if missing:
-            raise ValueError("缺少 MDM 资源：" + "、".join(missing))
+        status = self.status()
+        if status["missing"]:
+            raise ValueError("缺少 MDM 资源：" + "、".join(status["missing"]))
+        if status["invalid"]:
+            raise ValueError(
+                "MDM 模型资源大小不正确，请执行 git lfs pull："
+                + "、".join(status["invalid"])
+            )
+        hashes = {}
+        for path, expected in (
+            (self.checkpoint, CHECKPOINT_SHA256),
+            (self.text_encoder / "model.safetensors", TEXT_ENCODER_SHA256),
+        ):
+            with path.open("rb") as file:
+                digest = hashlib.file_digest(file, "sha256").hexdigest()
+            if digest != expected:
+                raise ValueError(f"MDM 模型资源 SHA-256 校验失败：{path}")
+            hashes[path] = digest
         # All weights, including DistilBERT, were downloaded for this workspace.
         # A generation request must never silently start a network download.
         os.environ["HF_HUB_OFFLINE"] = "1"
@@ -197,10 +226,8 @@ class MDMEngine:
         load_saved_model(model, str(self.checkpoint), use_avg=args.use_ema)
         model.eval()
         model.to(self.device)
-        with self.checkpoint.open("rb") as file:
-            checkpoint_hash = hashlib.file_digest(file, "sha256").hexdigest()
         self.model_info = {"checkpoint": self.checkpoint.name,
-                           "checkpoint_sha256": checkpoint_hash, "diffusion_steps": diffusion.num_timesteps,
+                           "checkpoint_sha256": hashes[self.checkpoint], "diffusion_steps": diffusion.num_timesteps,
                            "use_ema": args.use_ema, "device": str(self.device)}
         self.model, self.diffusion = model, diffusion
 

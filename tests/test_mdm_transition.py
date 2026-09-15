@@ -7,6 +7,7 @@ from bvh_processing.config import Settings
 from bvh_processing.services import mdm_transition
 from bvh_processing.services.download import DownloadedBvh
 from bvh_processing.vendor.mdm.merge import GUIDANCE_PARAM, TEXT_CONDITION
+from bvh_processing.vendor.mdm.workbench.transitions import MDMEngine
 
 
 def _downloaded(name: str, content: bytes) -> DownloadedBvh:
@@ -46,7 +47,7 @@ def test_mdm_merge_calls_bundled_module_directly(
     assert result == b"generated-bvh"
     assert calls[0] == ("resource_root", resource_root)
     clips, (intervals, kwargs) = calls[1]
-    assert [(clip.filename, clip.content) for clip in clips] == [
+    assert [(clip.filename, clip.read()) for clip in clips] == [
         ("a.bvh", b"A"),
         ("b.bvh", b"B"),
     ]
@@ -76,3 +77,31 @@ def test_mdm_merge_rejects_empty_module_output(
 def test_mdm_conditioning_is_fixed() -> None:
     assert TEXT_CONDITION == "A short, direct interpolation between the two poses."
     assert GUIDANCE_PARAM == 2.5
+
+
+def test_mdm_engine_rejects_unresolved_lfs_pointers(tmp_path: Path) -> None:
+    checkpoint = tmp_path / "checkpoint/model000600000.pt"
+    humanml = tmp_path / "humanml"
+    text_encoder = tmp_path / "text_encoder"
+    checkpoint.parent.mkdir()
+    (humanml / "new_joints").mkdir(parents=True)
+    text_encoder.mkdir()
+    pointer = b"version https://git-lfs.github.com/spec/v1\n"
+    checkpoint.write_bytes(pointer)
+    checkpoint.with_name("args.json").write_text("{}")
+    (humanml / "Mean.npy").write_bytes(b"x")
+    (humanml / "Std.npy").write_bytes(b"x")
+    (humanml / "new_joints/000021.npy").write_bytes(b"x")
+    (text_encoder / "config.json").write_text("{}")
+    (text_encoder / "model.safetensors").write_bytes(pointer)
+    (text_encoder / "tokenizer.json").write_text("{}")
+
+    engine = MDMEngine(checkpoint, humanml, text_encoder)
+
+    assert engine.status()["available"] is False
+    assert engine.status()["invalid"] == [
+        str(checkpoint),
+        str(text_encoder / "model.safetensors"),
+    ]
+    with pytest.raises(ValueError, match="git lfs pull"):
+        engine._load()

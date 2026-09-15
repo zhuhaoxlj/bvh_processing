@@ -22,6 +22,7 @@ from bvh_processing.services.processing import (
 )
 
 logger = logging.getLogger(__name__)
+_MDM_TASK_LOCK = asyncio.Lock()
 
 
 def _failure_message(error: Exception) -> str:
@@ -171,12 +172,24 @@ async def run_merge_task(
             normalized_resources,
             [segment.output_duration_seconds for segment in payload.segments],
         )
-        result = await asyncio.to_thread(
-            merge_bvh_files,
-            adjusted_resources,
-            [segment.gap_after_seconds for segment in payload.segments[:-1]],
-            settings,
-        )
+        intervals = [
+            segment.gap_after_seconds for segment in payload.segments[:-1]
+        ]
+        if any(intervals):
+            async with _MDM_TASK_LOCK:
+                result = await asyncio.to_thread(
+                    merge_bvh_files,
+                    adjusted_resources,
+                    intervals,
+                    settings,
+                )
+        else:
+            result = await asyncio.to_thread(
+                merge_bvh_files,
+                adjusted_resources,
+                intervals,
+                settings,
+            )
         await send_callback(
             client,
             callback_url=str(payload.callback_url),
