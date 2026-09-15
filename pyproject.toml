@@ -16,6 +16,9 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "qpsolvers[daqp]>=4.13.0",
     "scipy>=1.17.1",
+    "torch==2.11.0",
+    "tqdm==4.70.0",
+    "transformers==4.57.6",
     "uvicorn>=0.52.4",
 ]
 
@@ -34,6 +37,14 @@ testpaths = ["tests"]
 target-version = "py312"
 line-length = 88
 extend-exclude = ["src/bvh_processing/vendor"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [dependency-groups]
 dev = [

@@ -7,10 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent
 _EMBEDDED_WBT_ROOT = _PACKAGE_ROOT / "vendor" / "whole_body_tracking"
-_GAMES_SHOWBIZ_ROOT = _PACKAGE_ROOT.parents[2]
-_DEFAULT_MDM_ROOT = (
-    _GAMES_SHOWBIZ_ROOT / "robo-motion-in-between" / "motion-diffusion-model"
-)
+_DEFAULT_MDM_RESOURCE_ROOT = _PACKAGE_ROOT / "resources/mdm"
 
 
 class Settings(BaseSettings):
@@ -51,9 +48,7 @@ class Settings(BaseSettings):
         "unitree_description/mjcf/g1.xml"
     )
     npz_max_uncompressed_mb: int = 2048
-    mdm_project_root: str = str(_DEFAULT_MDM_ROOT)
-    mdm_python: str = str(_DEFAULT_MDM_ROOT / "bvh_workbench/.venv/bin/python")
-    mdm_timeout_seconds: float = Field(default=600.0, gt=0)
+    mdm_resource_root: str = str(_DEFAULT_MDM_RESOURCE_ROOT)
     mdm_seed: int = Field(default=10, ge=0, le=2147483647)
     mdm_source_scale: float = Field(default=0.01, ge=0.00001, le=10)
     mdm_source_up_axis: Literal["Y", "Z"] = "Y"

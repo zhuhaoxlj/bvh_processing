@@ -26,3 +26,5 @@
 *.docx binary
 *.mp3 binary
 *.mp4 binary
+src/bvh_processing/resources/mdm/checkpoint/*.pt filter=lfs diff=lfs merge=lfs -text
+src/bvh_processing/resources/mdm/text_encoder/*.safetensors filter=lfs diff=lfs merge=lfs -text

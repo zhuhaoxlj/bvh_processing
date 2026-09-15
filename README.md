@@ -6,7 +6,7 @@
 
 ## 环境要求
 
-- Python 3.11（`uv sync` 会依据 `.python-version` 自动准备）
+- Python 3.12（`uv sync` 会依据 `.python-version` 自动准备）
 - uv
 
 ## 安装与启动
@@ -278,8 +278,11 @@ HTTP 409。
   表示，并由本地 MDM 检查点通过掩码补间生成中间动作，再重定向回动作 A 的
   原 BVH 骨架和帧率。反向导出支持 Nokov/ToeBase，以及无附加未映射关节的
   HumanML3D/Mixamo 骨架；`gapAfterSec=0` 不生成中间帧，只对齐后直接拼接。
-- 生成路径使用 `BVH_MDM_PROJECT_ROOT` 指定的项目及其独立 Python 环境；模型、
-  HumanML3D 统计量或受支持骨架不满足要求时，任务失败，不回退到机械插值。
+- MDM、HumanML3D 转换和 BVH 回写代码已作为 `bvh_processing` 的内部模块集成，
+  由当前进程直接调用，不会启动外部 Python 或依赖相邻源码仓库。
+- 模型资源默认位于 `src/bvh_processing/resources/mdm`，可通过
+  `BVH_MDM_RESOURCE_ROOT` 指向其他目录。目录内需要包含 `checkpoint`、`humanml`
+  和 `text_encoder`；资源不完整时任务失败，不回退到机械插值。
 - 只有一个片段时也可处理，完成裁剪和变速后直接生成结果文件。
 
 处理成功后，服务向 `callbackUrl` 发送一次 `multipart/form-data` 回调：

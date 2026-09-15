@@ -277,7 +277,7 @@ async def train(
 #     → normalize_bvh_frame_rates()：统一到最低帧率
 #     → adjust_bvh_motion_durations()：按 outputDurationSec 重采样，
 #       目标时长更短则加速，目标时长更长则放慢
-#     → merge_bvh_files()：在独立 Python/CUDA 环境中把 BVH 转为 HumanML3D，
+#     → merge_bvh_files()：通过内置 MDM 模块把 BVH 转为 HumanML3D，
 #       使用 MDM 掩码补间生成 gapAfterSec 对应的接缝动作，再重定向回原骨架
 #     → send_callback(file=*_merged.bvh)：上传最终合并文件
 #

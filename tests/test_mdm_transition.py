@@ -1,77 +1,78 @@
-import subprocess
 from io import BytesIO
 from pathlib import Path
 
 import pytest
 
 from bvh_processing.config import Settings
+from bvh_processing.services import mdm_transition
 from bvh_processing.services.download import DownloadedBvh
-from bvh_processing.services.mdm_transition import generate_mdm_merge
+from bvh_processing.vendor.mdm.merge import GUIDANCE_PARAM, TEXT_CONDITION
 
 
 def _downloaded(name: str, content: bytes) -> DownloadedBvh:
     return DownloadedBvh(BytesIO(content), name, len(content))
 
 
-def test_mdm_merge_runs_configured_virtualenv_and_returns_output(
+def test_mdm_merge_calls_bundled_module_directly(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    project = tmp_path / "mdm"
-    python = project / ".venv/bin/python"
-    python.parent.mkdir(parents=True)
-    python.write_text("")
-    calls: list[tuple[list[str], Path]] = []
+    resource_root = tmp_path / "mdm-assets"
+    engine = object()
+    calls: list[tuple[object, object]] = []
 
-    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess:
-        calls.append((command, Path(str(kwargs["cwd"]))))
-        output = Path(command[command.index("--output") + 1])
-        output.write_bytes(b"generated-bvh")
-        return subprocess.CompletedProcess(command, 0, "{}", "")
+    def fake_engine_for(path: Path) -> object:
+        calls.append(("resource_root", path))
+        return engine
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    def fake_merge(clips, intervals, **kwargs) -> bytes:
+        calls.append((clips, (intervals, kwargs)))
+        return b"generated-bvh"
+
+    monkeypatch.setattr(mdm_transition, "_engine_for", fake_engine_for)
+    monkeypatch.setattr(mdm_transition, "merge_bvh_clips", fake_merge)
     settings = Settings(
-        mdm_project_root=str(project),
-        mdm_python=str(python),
+        mdm_resource_root=str(resource_root),
         mdm_seed=42,
         mdm_source_scale=0.001,
         mdm_source_up_axis="Z",
     )
 
-    result = generate_mdm_merge(
+    result = mdm_transition.generate_mdm_merge(
         [_downloaded("a.bvh", b"A"), _downloaded("b.bvh", b"B")],
         [0.75],
         settings,
     )
 
     assert result == b"generated-bvh"
-    command, cwd = calls[0]
-    assert command[0] == str(python.absolute())
-    assert command[1:3] == ["-m", "bvh_workbench.merge_cli"]
-    assert command[command.index("--transition-seconds") + 1] == "0.75"
-    assert command[command.index("--seed") + 1] == "42"
-    assert command[command.index("--scale") + 1] == "0.001"
-    assert command[command.index("--up-axis") + 1] == "Z"
-    assert cwd == project.resolve()
+    assert calls[0] == ("resource_root", resource_root)
+    clips, (intervals, kwargs) = calls[1]
+    assert [(clip.filename, clip.content) for clip in clips] == [
+        ("a.bvh", b"A"),
+        ("b.bvh", b"B"),
+    ]
+    assert intervals == [0.75]
+    assert kwargs == {
+        "engine": engine,
+        "seed": 42,
+        "scale": 0.001,
+        "up_axis": "Z",
+    }
 
 
-def test_mdm_merge_reports_subprocess_failure(
+def test_mdm_merge_rejects_empty_module_output(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    project = tmp_path / "mdm"
-    python = project / ".venv/bin/python"
-    python.parent.mkdir(parents=True)
-    python.write_text("")
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(
-            args[0], 1, "", "unsupported skeleton"
-        ),
-    )
+    monkeypatch.setattr(mdm_transition, "_engine_for", lambda _path: object())
+    monkeypatch.setattr(mdm_transition, "merge_bvh_clips", lambda *args, **kwargs: b"")
 
-    with pytest.raises(ValueError, match="unsupported skeleton"):
-        generate_mdm_merge(
+    with pytest.raises(ValueError, match="空 BVH"):
+        mdm_transition.generate_mdm_merge(
             [_downloaded("a.bvh", b"A"), _downloaded("b.bvh", b"B")],
             [1.0],
-            Settings(mdm_project_root=str(project), mdm_python=str(python)),
+            Settings(mdm_resource_root=str(tmp_path)),
         )
+
+
+def test_mdm_conditioning_is_fixed() -> None:
+    assert TEXT_CONDITION == "A short, direct interpolation between the two poses."
+    assert GUIDANCE_PARAM == 2.5
