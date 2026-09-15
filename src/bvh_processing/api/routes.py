@@ -277,9 +277,8 @@ async def train(
 #     → normalize_bvh_frame_rates()：统一到最低帧率
 #     → adjust_bvh_motion_durations()：按 outputDurationSec 重采样，
 #       目标时长更短则加速，目标时长更长则放慢
-#     → merge_bvh_files()：将非末段 gapAfterSec 换算为接缝过渡帧数，
-#       对后一个动作执行根节点位置/朝向对齐，使用 Hermite 曲线插值根节点
-#       位移、缓动旋转插值关节姿态，并锁定支撑脚
+#     → merge_bvh_files()：在独立 Python/CUDA 环境中把 BVH 转为 HumanML3D，
+#       使用 MDM 掩码补间生成 gapAfterSec 对应的接缝动作，再重定向回原骨架
 #     → send_callback(file=*_merged.bvh)：上传最终合并文件
 #
 # 返回：ProcessBvhResponse，表示合并任务是否已接收；最终 BVH 通过回调上传。
@@ -291,8 +290,8 @@ async def train(
     description=(
         "按 segments 的顺序异步处理并合并 BVH 片段。每段先根据 "
         "sourceInSec/sourceOutSec 裁剪已有帧，再统一帧率并按 "
-        "outputDurationSec 调整速度；非末段的 gapAfterSec 表示与下一动作的"
-        "平滑过渡时长。过渡阶段会执行根节点对齐、旋转插值和支撑脚锁定。"
+        "outputDurationSec 调整速度；非末段的 gapAfterSec 大于 0 时使用本地 "
+        "MDM 检查点生成与下一动作的中间过渡。"
         "timelineOffsetSec 不写入输出 BVH。完成后通过 callbackUrl 上传文件。"
     ),
     tags=["bvh"],

@@ -249,7 +249,9 @@ HTTP 409。
   表示文件末尾。边界按最近的已有帧裁剪，不生成插值姿态。
 - `outputDurationSec`：裁剪片段的目标时长；比裁剪后时长短则加速，
   比裁剪后时长长则减速。
-- `gapAfterSec`：当前片段与下一片段的平滑过渡秒数，范围为 0～10；
+- `gapAfterSec`：当前片段与下一片段的 MDM 生成过渡秒数；`0` 表示不生成，
+  当前模型的非零范围为 0.05～7.8 秒，具体限制由模型端校验，超出范围的
+  任务会在结果回调中返回失败；
   最后一段的值不参与合并。
 - `segmentId/actionId`：分别用于标识时间轴片段和动作库资源。
 - `timelineOffsetSec`：首动作时间轴偏移，不写入输出 BVH。
@@ -272,7 +274,12 @@ HTTP 409。
 - 各片段会先按 `sourceInSec/sourceOutSec` 裁剪已有帧，再统一到所有片段中的
   最低帧率，最后按 `outputDurationSec` 变速。
 - 所有文件必须具有相同的骨架层级和关节顺序。
-- `gapAfterSec` 会根据统一后的 `Frame Time` 四舍五入换算成接缝过渡帧数。
+- `gapAfterSec > 0` 时，会把接缝两侧动作转换到 HumanML3D 22 关节、20 FPS
+  表示，并由本地 MDM 检查点通过掩码补间生成中间动作，再重定向回动作 A 的
+  原 BVH 骨架和帧率。反向导出支持 Nokov/ToeBase，以及无附加未映射关节的
+  HumanML3D/Mixamo 骨架；`gapAfterSec=0` 不生成中间帧，只对齐后直接拼接。
+- 生成路径使用 `BVH_MDM_PROJECT_ROOT` 指定的项目及其独立 Python 环境；模型、
+  HumanML3D 统计量或受支持骨架不满足要求时，任务失败，不回退到机械插值。
 - 只有一个片段时也可处理，完成裁剪和变速后直接生成结果文件。
 
 处理成功后，服务向 `callbackUrl` 发送一次 `multipart/form-data` 回调：

@@ -719,7 +719,17 @@ def test_process_rejects_callback_token() -> None:
 
 def test_merge_accepts_task_and_callbacks_with_merged_file() -> None:
     payload = _merge_request_body()
-    with respx.mock:
+    generated = MERGE_BVH_1.replace(b"Frames: 2", b"Frames: 6").replace(
+        b"1 0 0 0 0 0 0 0 0 0 0 0\n",
+        b"1 0 0 0 0 0 0 0 0 0 0 0\n" * 5,
+    )
+    with (
+        patch(
+            "bvh_processing.services.processing.generate_mdm_merge",
+            return_value=generated,
+        ),
+        respx.mock,
+    ):
         respx.get(MERGE_SOURCE_URL_1).mock(
             return_value=Response(200, content=MERGE_BVH_1)
         )
@@ -747,7 +757,17 @@ def test_merge_accepts_task_and_callbacks_with_merged_file() -> None:
 
 def test_merge_normalizes_all_files_to_lowest_frame_rate() -> None:
     payload = _merge_request_body(first_duration=0.1, gap=0)
-    with respx.mock:
+    generated = MERGE_BVH_1.replace(b"Frames: 2", b"Frames: 5").replace(
+        b"1 0 0 0 0 0 0 0 0 0 0 0\n",
+        b"1 0 0 0 0 0 0 0 0 0 0 0\n" * 4,
+    )
+    with (
+        patch(
+            "bvh_processing.services.processing.generate_mdm_merge",
+            return_value=generated,
+        ),
+        respx.mock,
+    ):
         respx.get(MERGE_SOURCE_URL_1).mock(
             return_value=Response(200, content=MERGE_BVH_HIGH_FPS)
         )

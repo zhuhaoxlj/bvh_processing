@@ -202,7 +202,6 @@ class MergeBvhSegment(BaseModel):
     gap_after_seconds: float = Field(
         alias="gapAfterSec",
         ge=0,
-        le=10,
         description="当前片段与下一片段之间的过渡时长",
     )
 

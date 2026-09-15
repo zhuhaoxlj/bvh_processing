@@ -7,13 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import SpooledTemporaryFile
 
+from bvh_processing.config import Settings
 from bvh_processing.errors import BvhServiceError
 from bvh_processing.services.download import DownloadedBvh
-from bvh_processing.services.transition import (
-    create_transitions,
-    motion_from_parts,
-    motion_hierarchy,
-)
+from bvh_processing.services.mdm_transition import generate_mdm_merge
 
 _SPOOL_MEMORY_LIMIT = 8 * 1024 * 1024
 _FRAMES_PATTERN = re.compile(r"^Frames\s*:\s*(\d+)\s*$", re.IGNORECASE)
@@ -196,6 +193,14 @@ def _rotation_channel_indexes(parsed: _ParsedBvh) -> set[int]:
         for index, name in enumerate(channel_names)
         if name.lower().endswith("rotation")
     }
+
+
+def _joint_names(parsed: _ParsedBvh) -> list[str]:
+    return [
+        match.group(1)
+        for line in parsed.hierarchy.splitlines()
+        if (match := re.match(r"^\s*(?:ROOT|JOINT)\s+(\S+)", line))
+    ]
 
 
 def _unwrap_rotations(
@@ -443,8 +448,9 @@ def adjust_bvh_motion_durations(
 def merge_bvh_files(
     downloaded_files: list[DownloadedBvh],
     intervals_seconds: list[float],
+    settings: Settings,
 ) -> DownloadedBvh:
-    """使用动作对齐、旋转插值和脚部锁定过渡来合并多个 BVH。"""
+    """使用 MDM 生成相邻动作的中间过渡并合并多个 BVH。"""
     if not downloaded_files or len(intervals_seconds) != len(downloaded_files) - 1:
         raise ValueError("BVH 文件与过渡时间数量不匹配")
 
@@ -463,33 +469,36 @@ def merge_bvh_files(
         ):
             raise _invalid_bvh("所有 BVH 文件的 Frame Time 必须一致")
 
-    # intervalsSeconds 不再生成静止帧，而是转换成每个接缝的过渡帧数。
-    transition_frame_counts = [
-        math.floor(seconds / first.frame_time + 0.5) for seconds in intervals_seconds
-    ]
     try:
-        motions = [
-            motion_from_parts(parsed.hierarchy, parsed.frames, parsed.frame_time)
-            for parsed in parsed_files
-        ]
-        merged_motion = create_transitions(motions, transition_frame_counts)
+        expected_names = _joint_names(parsed_files[0])
+        for parsed in parsed_files[1:]:
+            if _joint_names(parsed) != expected_names:
+                raise ValueError("所有 BVH 必须使用相同的关节名称和顺序")
+        merged_bytes = generate_mdm_merge(
+            downloaded_files,
+            intervals_seconds,
+            settings,
+        )
     except ValueError as error:
         raise _invalid_bvh(str(error)) from error
-
-    merged_frames = [
-        " ".join(_format_motion_value(float(value)) for value in frame)
-        for frame in merged_motion.frames
-    ]
-    merged = _ParsedBvh(
-        hierarchy=motion_hierarchy(merged_motion),
-        frame_time=first.frame_time,
-        frame_time_text=first.frame_time_text,
-        frames=merged_frames,
-        channel_count=merged_motion.frames.shape[1],
+    output = SpooledTemporaryFile(max_size=_SPOOL_MEMORY_LIMIT, mode="w+b")  # noqa: SIM115
+    output.write(merged_bytes)
+    output.seek(0)
+    result = DownloadedBvh(
+        content=output,
+        source_filename=merged_filename(downloaded_files[0].source_filename),
+        size=len(merged_bytes),
     )
-    return _build_bvh(
-        merged,
-        merged_frames,
-        first.frame_time_text,
-        merged_filename(downloaded_files[0].source_filename),
-    )
+    try:
+        parsed_result = _parse_bvh(result)
+        if not math.isclose(
+            parsed_result.frame_time,
+            first.frame_time,
+            rel_tol=1e-7,
+            abs_tol=1e-9,
+        ):
+            raise _invalid_bvh("MDM 输出 BVH 的 Frame Time 与输入不一致")
+    except Exception:
+        result.content.close()
+        raise
+    return result

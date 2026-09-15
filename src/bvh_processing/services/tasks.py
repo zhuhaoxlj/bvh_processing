@@ -175,6 +175,7 @@ async def run_merge_task(
             merge_bvh_files,
             adjusted_resources,
             [segment.gap_after_seconds for segment in payload.segments[:-1]],
+            settings,
         )
         await send_callback(
             client,
