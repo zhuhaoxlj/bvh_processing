@@ -91,6 +91,7 @@ async def run_processing_task(
         2: (3, "SMOOTH_FRAME", "整体平滑与补帧"),
         3: (4, "FOOT_LOCK", "脚步锁定校正"),
         4: (5, "LOOP_OPTIMIZE", "循环优化（首尾自然过渡）"),
+        5: (6, "FACE_X", "朝向对齐（面向 X 轴正方向）"),
     }
 
     options = [opt for opt in payload.handle_options if opt in option_to_step]

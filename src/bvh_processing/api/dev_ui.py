@@ -288,14 +288,20 @@ async def dev_ui_root() -> RedirectResponse:
     return RedirectResponse("/dev/bvh", status_code=302)
 
 
-@router.get(
+@router.api_route(
     "/dev/bvh",
+    methods=["GET", "HEAD"],
     summary="[自测] BVH 处理测试页面",
     description="本地联调用的单页工具：上传 BVH、调用 /api/v1/bvh/process、预览处理结果。",
     include_in_schema=False,
 )
 async def dev_ui_page() -> FileResponse:
-    return FileResponse(INDEX_HTML, media_type="text/html; charset=utf-8")
+    return FileResponse(
+        INDEX_HTML,
+        media_type="text/html; charset=utf-8",
+        # 自测页面改动频繁，禁止缓存，避免刷新后拿到的还是旧版本。
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.post(

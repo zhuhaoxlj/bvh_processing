@@ -140,6 +140,11 @@
     color: var(--muted);
     white-space: nowrap;
   }
+  .transport .keys {
+    font-size: 11px;
+    color: #5f7086;
+    white-space: nowrap;
+  }
   .transport .toggle {
     display: flex;
     align-items: center;
@@ -256,6 +261,7 @@
   <h1>BVH 处理自测台</h1>
   <span class="hint">上传 → <code>/api/v1/bvh/process</code> → 回调取结果 → three.js 预览</span>
   <span class="spacer"></span>
+  <span class="hint" id="pageVersion"></span>
   <span class="pill" id="statusPill">未开始</span>
 </header>
 
@@ -272,6 +278,7 @@
       <label><input type="checkbox" name="opt" value="2" checked> 2 整体平滑与补帧</label>
       <label><input type="checkbox" name="opt" value="3"> 3 脚步锁定校正</label>
       <label><input type="checkbox" name="opt" value="4"> 4 循环优化（首尾自然过渡）</label>
+      <label><input type="checkbox" name="opt" value="5"> 5 朝向对齐（面向 X 轴正方向）</label>
     </fieldset>
 
     <div class="row">
@@ -311,9 +318,10 @@
 
 <div class="transport">
   <button id="playBtn">暂停</button>
-  <input type="range" id="timeline" min="0" max="1000" step="1" value="0"
-         aria-label="播放进度（同时控制两个预览窗口）">
-  <span class="readout" id="readout">进度 0%</span>
+  <input type="range" id="timeline" min="0" max="0" step="1" value="0" disabled
+         aria-label="播放进度，按帧步进，同时控制两个预览窗口">
+  <span class="readout" id="readout">帧 0/0</span>
+  <span class="keys">空格 播放/暂停 · ←/→ 逐帧</span>
   <label class="toggle">
     <input type="checkbox" id="syncCam" checked> 同步视角
   </label>
@@ -548,6 +556,7 @@ function createViewer(canvas, boneColor, jointColor, onInteract) {
   let jointGroup = null;
   let mixer = null;
   let clipDuration = 0;
+  let clipFrames = 0;
   let bones = [];
   let markers = [];
   // 复用的视图快照，避免每帧给相机同步分配新对象。
@@ -579,6 +588,7 @@ function createViewer(canvas, boneColor, jointColor, onInteract) {
     }
     root = helper = grid = jointGroup = axisGroup = mixer = null;
     clipDuration = 0;
+    clipFrames = 0;
     bones = [];
     markers = [];
   }
@@ -646,6 +656,8 @@ function createViewer(canvas, boneColor, jointColor, onInteract) {
     mixer = new THREE.AnimationMixer(root);
     mixer.clipAction(parsed.clip).play();
     clipDuration = parsed.clip.duration;
+    // 关键帧数即 BVH 帧数，用来把进度条切成"一帧一格"。
+    clipFrames = parsed.clip.tracks[0]?.times.length ?? 1;
 
     const box = measure(root, parsed.clip, bones);
     const size = box.getSize(new THREE.Vector3());
@@ -760,6 +772,9 @@ function createViewer(canvas, boneColor, jointColor, onInteract) {
     get duration() {
       return clipDuration;
     },
+    get frameCount() {
+      return clipFrames;
+    },
     get hasClip() {
       return root !== null;
     },
@@ -785,6 +800,27 @@ let scrubbing = false;
 let resumeAfterScrub = false;
 let lastReadoutAt = 0;
 
+/** 时间轴按"帧"走：取两条动作里帧数多的那条作为刻度。 */
+function timelineSteps() {
+  return Math.max(sourceViewer.frameCount, resultViewer.frameCount, 1);
+}
+
+function currentFrame() {
+  const steps = timelineSteps();
+  return steps > 1 ? Math.round(progress * (steps - 1)) : 0;
+}
+
+function syncTimelineRange() {
+  const steps = timelineSteps();
+  const loaded = sourceViewer.hasClip || resultViewer.hasClip;
+  timeline.min = '0';
+  timeline.max = String(Math.max(steps - 1, 0));
+  timeline.step = '1';
+  timeline.value = String(currentFrame());
+  timeline.disabled = !loaded || steps <= 1;
+  updateReadout();
+}
+
 function updatePlayButton() {
   $('playBtn').textContent = playing ? '暂停' : '播放';
 }
@@ -797,11 +833,34 @@ function currentTimes() {
 }
 
 function updateReadout() {
+  const steps = timelineSteps();
   const { source, result } = currentTimes();
-  const parts = [`进度 ${Math.round(progress * 100)}%`];
+  const parts = [];
+  if (sourceViewer.hasClip || resultViewer.hasClip) {
+    parts.push(`帧 ${currentFrame() + 1}/${steps}`);
+  } else {
+    parts.push('帧 0/0');
+  }
   if (sourceViewer.hasClip) parts.push(`原始 ${source.toFixed(2)}s`);
   if (resultViewer.hasClip) parts.push(`结果 ${result.toFixed(2)}s`);
   $('readout').textContent = parts.join(' · ');
+}
+
+function togglePlay() {
+  if (!sourceViewer.hasClip && !resultViewer.hasClip) return;
+  playing = !playing;
+  updatePlayButton();
+}
+
+/** 前后挪一帧；逐帧查看时先暂停，避免刚挪过去又被播放带走。 */
+function stepFrames(delta) {
+  const steps = timelineSteps();
+  if (steps <= 1) return;
+  progress = Math.min(Math.max(currentFrame() + delta, 0), steps - 1) / (steps - 1);
+  playing = false;
+  timeline.value = String(currentFrame());
+  updatePlayButton();
+  updateReadout();
 }
 
 function animate() {
@@ -815,7 +874,7 @@ function animate() {
   }
   sourceViewer.setProgress(progress);
   resultViewer.setProgress(progress);
-  if (!scrubbing) timeline.value = String(Math.round(progress * 1000));
+  if (!scrubbing) timeline.value = String(currentFrame());
 
   if (syncToggle.checked) {
     const follower = activeViewer === sourceViewer ? resultViewer : sourceViewer;
@@ -839,13 +898,11 @@ function animate() {
 }
 animate();
 
-$('playBtn').addEventListener('click', () => {
-  playing = !playing;
-  updatePlayButton();
-});
+$('playBtn').addEventListener('click', togglePlay);
 
 timeline.addEventListener('input', () => {
-  progress = Number(timeline.value) / 1000;
+  const steps = timelineSteps();
+  progress = steps > 1 ? Number(timeline.value) / (steps - 1) : 0;
   updateReadout();
 });
 
@@ -866,6 +923,26 @@ function endScrub() {
   playing = resumeAfterScrub;
   updatePlayButton();
 }
+
+// 空格播放/暂停，左右方向键逐帧前后；在页面任意位置按都生效。
+window.addEventListener('keydown', (event) => {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  const target = event.target;
+
+  if (event.code === 'Space') {
+    // 只有复选框的空格留给它自己（那是它的开关）；按钮上一律当作播放/暂停，
+    // 否则焦点停在「上传并调用接口」上时空格会又跑一遍处理。
+    if (target instanceof HTMLInputElement && target.type === 'checkbox') return;
+    event.preventDefault();
+    togglePlay();
+  } else if (event.code === 'ArrowLeft') {
+    event.preventDefault();
+    stepFrames(-1);
+  } else if (event.code === 'ArrowRight') {
+    event.preventDefault();
+    stepFrames(1);
+  }
+});
 
 // ---------------------------------------------------------------- 交互与流程
 
@@ -889,6 +966,7 @@ function previewSource(text, label) {
     const info = sourceViewer.load(text);
     $('sourceInfo').textContent =
       `${label} · ${info.bones} 关节 · ${info.duration.toFixed(3)}s`;
+    syncTimelineRange();
     return info;
   } catch (error) {
     $('sourceInfo').textContent = '解析失败';
@@ -922,6 +1000,7 @@ async function handleFile(file) {
   selectedFile = file;
   resultUrl = null;
   resultViewer.clear();
+  syncTimelineRange();
   clearExchanges();
   $('dropText').textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
   $('resultInfo').textContent = '';
@@ -944,7 +1023,7 @@ $('clearBtn').addEventListener('click', () => {
   $('downloadBtn').disabled = true;
   $('resultInfo').textContent = '';
   setStatus('未开始', '');
-  updateReadout();
+  syncTimelineRange();
   logLine('已清空处理结果');
 });
 
@@ -1056,7 +1135,7 @@ async function run() {
   resultUrl = task.result.url;
   $('resultInfo').textContent =
     `${task.result.filename} · ${info.bones} 关节 · ${info.duration.toFixed(3)}s`;
-  updateReadout();
+  syncTimelineRange();
 
   busy = false;
   refreshButtons();
@@ -1095,6 +1174,16 @@ async function pollTask(taskId, timeoutMs) {
 
 refreshButtons();
 logLine('就绪。选择 .bvh 文件后会先本地预览，再点“上传并调用接口”。', 'info');
+
+// 把页面文件自己的 Last-Modified 显示出来：改了页面但没刷新时，一眼能看出来。
+fetch('/dev/bvh', { method: 'HEAD', cache: 'no-store' })
+  .then((response) => {
+    const modified = response.headers.get('last-modified');
+    if (!modified) return;
+    const stamp = new Date(modified).toLocaleString('zh-CN', { hour12: false });
+    $('pageVersion').textContent = `页面构建 ${stamp}`;
+  })
+  .catch(() => {});
 </script>
 </body>
 </html>

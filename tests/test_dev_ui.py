@@ -72,11 +72,15 @@ def _upload(client: httpx.Client, content: bytes = BVH_CONTENT, name: str = "wal
 def test_dev_ui_page_and_assets_are_served_when_enabled() -> None:
     with TestClient(_dev_app(_dev_settings())) as client:
         page = client.get("/dev/bvh")
+        head = client.head("/dev/bvh")
         three = client.get("/dev/bvh/static/three.module.min.js")
         loader = client.get("/dev/bvh/static/BVHLoader.js")
 
     assert page.status_code == 200
     assert page.headers["content-type"].startswith("text/html")
+    # 页面改动频繁，必须禁用缓存，否则刷新后可能还是旧版本。
+    assert page.headers["cache-control"] == "no-store"
+    assert head.status_code == 200
     assert "'/api/v1/bvh/process'" in page.text
     assert 'id="canvasSource"' in page.text
     assert 'id="canvasResult"' in page.text

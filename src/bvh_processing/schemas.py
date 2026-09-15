@@ -30,7 +30,7 @@ class ProcessBvhRequest(BaseModel):
         alias="handleOptions",
         description=(
             "按顺序执行的处理选项编号：1 整体去噪，2 整体平滑，"
-            "3 脚步锁定校正，4 循环优化"
+            "3 脚步锁定校正，4 循环优化，5 朝向对齐（面向 X 轴正方向）"
         ),
     )
     callback_url: AnyHttpUrl = Field(

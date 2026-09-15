@@ -3,9 +3,12 @@ from __future__ import annotations
 import math
 import re
 import statistics
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import SpooledTemporaryFile
+
+import numpy as np
+from scipy.spatial.transform import Rotation
 
 from bvh_processing.config import Settings
 from bvh_processing.errors import BvhServiceError
@@ -19,6 +22,12 @@ _FRAME_TIME_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _CHANNELS_PATTERN = re.compile(r"^\s*CHANNELS\s+(\d+)\s+(.+)$", re.IGNORECASE)
+_EPSILON = 1e-9
+# 判定"静止绑定姿势帧"的容差：所有旋转通道都接近 0 就认为是 T-pose 帧。
+_REST_POSE_TOLERANCE_DEGREES = 1.0
+# 判定人体朝向用的左右大腿根关节名，按优先级排列。
+_LEFT_HIP_JOINTS = ("LeftUpLeg", "LeftHip", "LeftUpperLeg", "LeftThigh")
+_RIGHT_HIP_JOINTS = ("RightUpLeg", "RightHip", "RightUpperLeg", "RightThigh")
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +37,16 @@ class _ParsedBvh:
     frame_time_text: str
     frames: list[str]
     channel_count: int
+
+
+@dataclass(slots=True)
+class _Joint:
+    """HIERARCHY 里的一个关节；``parent`` 是它在关节列表中的下标。"""
+
+    name: str
+    parent: int | None
+    offset: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    channels: tuple[str, ...] = field(default_factory=tuple)
 
 
 def processed_filename(source_filename: str) -> str:
@@ -50,6 +69,7 @@ def process_bvh(
         2: smooth_bvh,
         3: lock_bvh_feet,
         4: optimize_bvh_loop,
+        5: orient_bvh_facing_to_x,
     }
     current = downloaded
     try:
@@ -251,6 +271,25 @@ def _build_processed_bvh(
     )
 
 
+def _neighbor_indexes(
+    frame_index: int,
+    frame_count: int,
+    radius: int,
+    motion_start: int = 0,
+) -> list[int]:
+    """居中窗口下标；窗口中心始终是该帧本身，碰到边界就对称收缩。
+
+    复制边界帧会让首帧在自己窗口里占 3/5 权重，直接被拉进动作；
+    直接截断窗口则让它只占 1/3，同样被拉走。对称收缩保证边界帧的窗口只剩它自己。
+    ``motion_start`` 之前是开头的静止绑定姿势帧，它们不属于动作，
+    既不参与平均、也不被平均（否则静止帧会被摊进后面几帧，形成"追赶式"跳变）。
+    """
+    if frame_index < motion_start:
+        return [frame_index]
+    effective = min(radius, frame_index - motion_start, frame_count - 1 - frame_index)
+    return list(range(frame_index - effective, frame_index + effective + 1))
+
+
 def denoise_bvh(
     downloaded: DownloadedBvh,
     window_size: int = 3,
@@ -261,14 +300,13 @@ def denoise_bvh(
 
     parsed = _parse_bvh(downloaded)
     values = _motion_values(parsed, downloaded.source_filename)
-    _unwrap_rotations(values, _rotation_channel_indexes(parsed))
+    rest_channels = _rotation_channel_indexes(parsed)
+    _unwrap_rotations(values, rest_channels)
+    motion_start = _motion_start_index(values, rest_channels)
     radius = window_size // 2
     filtered: list[list[float]] = []
     for frame_index, frame in enumerate(values):
-        neighbors = [
-            min(max(index, 0), len(values) - 1)
-            for index in range(frame_index - radius, frame_index + radius + 1)
-        ]
+        neighbors = _neighbor_indexes(frame_index, len(values), radius, motion_start)
         filtered.append(
             [
                 statistics.median(values[index][channel] for index in neighbors)
@@ -288,14 +326,13 @@ def smooth_bvh(
 
     parsed = _parse_bvh(downloaded)
     values = _motion_values(parsed, downloaded.source_filename)
-    _unwrap_rotations(values, _rotation_channel_indexes(parsed))
+    rest_channels = _rotation_channel_indexes(parsed)
+    _unwrap_rotations(values, rest_channels)
+    motion_start = _motion_start_index(values, rest_channels)
     radius = window_size // 2
     smoothed: list[list[float]] = []
     for frame_index, frame in enumerate(values):
-        neighbors = [
-            min(max(index, 0), len(values) - 1)
-            for index in range(frame_index - radius, frame_index + radius + 1)
-        ]
+        neighbors = _neighbor_indexes(frame_index, len(values), radius, motion_start)
         smoothed.append(
             [
                 statistics.fmean(values[index][channel] for index in neighbors)
@@ -313,6 +350,193 @@ def lock_bvh_feet(downloaded: DownloadedBvh) -> DownloadedBvh:
 def optimize_bvh_loop(downloaded: DownloadedBvh) -> DownloadedBvh:
     """循环优化算法占位；当前保持 BVH 数据不变。"""
     return downloaded
+
+
+def _parse_joints(hierarchy: str) -> list[_Joint]:
+    """解析 HIERARCHY，返回与 MOTION 数据同序的关节列表（先根后子，深度优先）。"""
+    joints: list[_Joint] = []
+    stack: list[int] = []
+    for raw_line in hierarchy.splitlines():
+        line = raw_line.strip()
+        if line.startswith(("ROOT ", "JOINT ")):
+            parent = stack[-1] if stack else None
+            joints.append(_Joint(name=line.split(None, 1)[1].strip(), parent=parent))
+            stack.append(len(joints) - 1)
+        elif line == "End Site":
+            joints.append(_Joint(name="End Site", parent=stack[-1] if stack else None))
+            stack.append(len(joints) - 1)
+        elif line == "}":
+            if stack:
+                stack.pop()
+        elif line.startswith("OFFSET"):
+            parts = line.split()
+            if len(parts) >= 4 and stack:
+                joints[stack[-1]].offset = (
+                    float(parts[1]),
+                    float(parts[2]),
+                    float(parts[3]),
+                )
+        elif line.startswith("CHANNELS"):
+            parts = line.split()
+            if len(parts) >= 3 and stack:
+                joints[stack[-1]].channels = tuple(parts[2:])
+    return joints
+
+
+def _joint_index(joints: list[_Joint], names: tuple[str, ...]) -> int | None:
+    for name in names:
+        for index, joint in enumerate(joints):
+            if joint.name == name:
+                return index
+    return None
+
+
+def _offset_from_root(joints: list[_Joint], index: int) -> np.ndarray:
+    """累加根节点到该关节的 OFFSET；要求这条链上只有平移（左右髋通常直接挂在根上）。"""
+    total = np.zeros(3)
+    current: int | None = index
+    while current is not None:
+        joint = joints[current]
+        total = total + np.array(joint.offset)
+        current = joint.parent
+    return total
+
+
+def _axis_rotation(axis: str, degrees: float) -> np.ndarray:
+    radians = math.radians(degrees)
+    cos, sin = math.cos(radians), math.sin(radians)
+    if axis == "X":
+        return np.array([[1.0, 0.0, 0.0], [0.0, cos, -sin], [0.0, sin, cos]])
+    if axis == "Y":
+        return np.array([[cos, 0.0, sin], [0.0, 1.0, 0.0], [-sin, 0.0, cos]])
+    return np.array([[cos, -sin, 0.0], [sin, cos, 0.0], [0.0, 0.0, 1.0]])
+
+
+def _root_rotation_channels(root: _Joint) -> list[tuple[int, str]]:
+    """根节点的旋转通道，返回 (在帧数据中的下标, 轴名)，顺序与文件一致。"""
+    return [
+        (index, name[0].upper())
+        for index, name in enumerate(root.channels)
+        if name.lower().endswith("rotation")
+    ]
+
+
+def _compose_rotation(
+    frame: list[float],
+    rotation_channels: list[tuple[int, str]],
+) -> np.ndarray:
+    """按通道出现顺序合成旋转矩阵，与 three.js BVHLoader 的乘法顺序一致。"""
+    matrix = np.identity(3)
+    for index, axis in rotation_channels:
+        matrix = matrix @ _axis_rotation(axis, frame[index])
+    return matrix
+
+
+def _cannot_orient(message: str) -> BvhServiceError:
+    return BvhServiceError(
+        status_code=422,
+        code="cannot_orient_bvh",
+        message=message,
+    )
+
+
+def _motion_start_index(values: list[list[float]], rest_channels: set[int]) -> int:
+    """返回动作真正开始的那一帧下标：跳过开头连续静止（旋转通道≈0）的绑定姿势帧。
+
+    有些素材会把 T-pose 当成第 0 帧写进去（该帧所有旋转通道都是 0，与下一帧相差上百度）。
+    这类帧不属于动作：既不能用来判断朝向，也不该被平均进后面的动作帧，
+    否则静止帧会被摊到随后几帧上，形成"追赶式"的一跳一跳。
+    全片都是静止姿势时退回第 0 帧。
+    """
+    index = 0
+    for frame in values:
+        if any(
+            abs(frame[channel]) > _REST_POSE_TOLERANCE_DEGREES
+            for channel in rest_channels
+        ):
+            break
+        index += 1
+    return index if index < len(values) else 0
+
+
+def orient_bvh_facing_to_x(downloaded: DownloadedBvh) -> DownloadedBvh:
+    """绕世界 Y 轴整体旋转动作，使人体朝向对准 X 轴正方向。
+
+    朝向由左右大腿根（髋）关节的连线确定：右髋指向左髋的反方向是身体右侧，
+    再取 ``up × right`` 得到面向。旋转角**只由第一帧决定**（跳过开头静止的 T-pose
+    帧，见 :func:`_motion_start_index`），后续所有帧跟着这一帧一起转。
+    整段动作共用同一个旋转角，因此动作本身不变形，只是整体转向；
+    根节点的位移也一起绕原点旋转，轨迹随之对齐到新的坐标系。
+    """
+    parsed = _parse_bvh(downloaded)
+    joints = _parse_joints(parsed.hierarchy)
+    root_index = next(
+        (index for index, joint in enumerate(joints) if joint.parent is None),
+        None,
+    )
+    if root_index is None:
+        raise _invalid_bvh(f"{downloaded.source_filename} 缺少根节点")
+    root = joints[root_index]
+
+    rotation_channels = _root_rotation_channels(root)
+    if not rotation_channels:
+        raise _cannot_orient("根节点没有旋转通道，无法调整人体朝向")
+
+    left_index = _joint_index(joints, _LEFT_HIP_JOINTS)
+    right_index = _joint_index(joints, _RIGHT_HIP_JOINTS)
+    if left_index is None or right_index is None:
+        raise _cannot_orient(
+            "找不到左右髋关节（如 LeftUpLeg/RightUpLeg），无法判断人体朝向"
+        )
+
+    local_right = _offset_from_root(joints, right_index) - _offset_from_root(
+        joints, left_index
+    )
+    if float(np.linalg.norm(local_right[[0, 2]])) < _EPSILON:
+        raise _cannot_orient("左右髋关节连线退化，无法判断人体朝向")
+
+    values = _motion_values(parsed, downloaded.source_filename)
+
+    # 朝向只由第一帧（跳过开头静止的 T-pose 帧）决定，整段动作随之刚性旋转。
+    reference_index = _motion_start_index(values, _rotation_channel_indexes(parsed))
+    right_vector = (
+        _compose_rotation(values[reference_index], rotation_channels) @ local_right
+    )
+    right_x, right_z = float(right_vector[0]), float(right_vector[2])
+    if math.hypot(right_x, right_z) < _EPSILON:
+        raise _cannot_orient(
+            f"第 {reference_index + 1} 帧的左右髋关节连线退化，无法判断人体朝向"
+        )
+
+    # 绕 Y 轴旋转 angle 后朝向落到 +X：朝向 = up × right = (right_z, 0, -right_x)，
+    # 其 XZ 极角为 atan2(-right_x, right_z)。
+    angle = math.degrees(math.atan2(-right_x, right_z))
+    rotation = _axis_rotation("Y", angle)
+    euler_order = "".join(axis for _, axis in rotation_channels)
+
+    position_indexes = {
+        name[0].upper(): index
+        for index, name in enumerate(root.channels)
+        if name.lower().endswith("position")
+    }
+    has_position = {"X", "Y", "Z"}.issubset(position_indexes)
+
+    for frame in values:
+        target = rotation @ _compose_rotation(frame, rotation_channels)
+        for (index, _), value in zip(
+            rotation_channels,
+            Rotation.from_matrix(target).as_euler(euler_order, degrees=True),
+        ):
+            frame[index] = float(value)
+
+        if has_position:
+            position = np.array(
+                [frame[position_indexes[axis]] for axis in ("X", "Y", "Z")]
+            )
+            for axis, value in zip(("X", "Y", "Z"), rotation @ position):
+                frame[position_indexes[axis]] = float(value)
+
+    return _build_processed_bvh(downloaded, parsed, values)
 
 
 def trim_bvh(

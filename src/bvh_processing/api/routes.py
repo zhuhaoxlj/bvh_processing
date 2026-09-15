@@ -59,7 +59,7 @@ async def health() -> HealthResponse:
 # - actionId：业务动作记录 ID。
 # - originalFileUrl：MinIO 中原始 BVH 的可下载地址。
 # - originalFileSha256：原始 BVH 的 SHA-256，下载后按原始字节校验。
-# - handleOptions：处理选项列表；1 去噪、2 平滑、3 脚步锁定、4 循环优化。
+# - handleOptions：处理选项列表；1 去噪、2 平滑、3 脚步锁定、4 循环优化、5 朝向对齐。
 # - callbackUrl：处理进度和最终结果的回调地址。
 #
 # 后台流程：

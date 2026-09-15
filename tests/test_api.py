@@ -209,6 +209,86 @@ def test_process_accepts_task_and_callbacks_with_file() -> None:
     assert all(body["originalFileUrl"] == SOURCE_URL for body in progress_bodies)
 
 
+HUMANOID_BVH_CONTENT = b"""HIERARCHY
+ROOT Hips
+{
+  OFFSET 0 0 0
+  CHANNELS 6 Xposition Yposition Zposition Zrotation Xrotation Yrotation
+  JOINT LeftUpLeg
+  {
+    OFFSET 10.5 -1.3 0
+    CHANNELS 3 Zrotation Xrotation Yrotation
+  }
+  JOINT RightUpLeg
+  {
+    OFFSET -10.5 -1.3 0
+    CHANNELS 3 Zrotation Xrotation Yrotation
+  }
+  JOINT LeftToe
+  {
+    OFFSET 0 -14 0
+    CHANNELS 3 Zrotation Xrotation Yrotation
+  }
+  JOINT RightToe
+  {
+    OFFSET 0 -14 0
+    CHANNELS 3 Zrotation Xrotation Yrotation
+  }
+}
+MOTION
+Frames: 2
+Frame Time: 0.05
+0 100 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+0 100 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+"""
+
+
+def test_process_option_five_aligns_facing_to_positive_x() -> None:
+    """handleOptions=5 把根节点绕 Y 轴转向 +X：该骨架初始面向 +Z，因此应转 90°。"""
+    humanoid_url = "https://minio.example.com/motions/humanoid.bvh"
+    app = create_app()
+
+    with respx.mock:
+        respx.get(humanoid_url).mock(
+            return_value=Response(
+                200,
+                content=HUMANOID_BVH_CONTENT,
+                headers={"Content-Length": str(len(HUMANOID_BVH_CONTENT))},
+            )
+        )
+        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+        progress_callback = respx.post(PROGRESS_CALLBACK_URL).mock(
+            return_value=Response(204)
+        )
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/bvh/process",
+                json={
+                    "actionId": "action-orient",
+                    "originalFileUrl": humanoid_url,
+                    "originalFileSha256": hashlib.sha256(
+                        HUMANOID_BVH_CONTENT
+                    ).hexdigest(),
+                    "handleOptions": [5],
+                    "callbackUrl": CALLBACK_URL,
+                },
+            )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+
+    progress_body = json.loads(progress_callback.calls.last.request.content)
+    assert progress_body["step"] == 6
+    assert progress_body["stepCode"] == "FACE_X"
+    assert progress_body["progress"] == 95
+
+    callback_body = callback.calls.last.request.content
+    assert b'filename="humanoid_processed.bvh"' in callback_body
+    # 根通道变为 Z=0、X=0、Y=90，其余通道保持 0
+    assert b"0 100 0 0 0 90 0 0 0 0 0 0 0 0 0 0 0 0" in callback_body
+
+
 def test_retarget_accepts_task_and_callbacks_with_npz_and_json(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
