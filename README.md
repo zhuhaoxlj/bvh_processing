@@ -357,7 +357,9 @@ HTTP 409。
 - `gapAfterSec > 0` 时，会把接缝两侧动作转换到 HumanML3D 22 关节、20 FPS
   表示，并由本地 MDM 检查点通过掩码补间生成中间动作，再重定向回动作 A 的
   原 BVH 骨架和帧率。反向导出支持 Nokov/ToeBase，以及无附加未映射关节的
-  HumanML3D/Mixamo 骨架；`gapAfterSec=0` 不生成中间帧，只对齐后直接拼接。
+  HumanML3D/Mixamo 骨架。输出保留 A 的原始末帧和 B 的原始首帧旋转及动作；
+  B 只平移根位置，不随生成过渡旋转。生成段校正支撑脚高度；若两侧均为
+  双脚稳定站立，还会平滑衔接腿部姿态。`gapAfterSec=0` 不生成中间帧，只对齐后直接拼接。
 - MDM、HumanML3D 转换和 BVH 回写代码已作为 `bvh_processing` 的内部模块集成，
   由当前进程直接调用，不会启动外部 Python 或依赖相邻源码仓库。
 - 模型资源默认位于 `src/bvh_processing/resources/mdm`，可通过

@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
 import warnings
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.spatial.transform import Rotation, Slerp
 
-from bvh_processing.vendor.mdm.workbench.bvh import BVHMotion, read_bvh, world_positions
-from bvh_processing.vendor.mdm.workbench.conversion import HML_JOINT_NAMES, TARGET_FPS, joint_mapping
 from bvh_processing.vendor.mdm.data.humanml.common.quaternion import cont6d_to_matrix_np
 from bvh_processing.vendor.mdm.data.humanml.param_util import t2m_raw_offsets
+from bvh_processing.vendor.mdm.workbench.bvh import BVHMotion, read_bvh, world_positions
+from bvh_processing.vendor.mdm.workbench.conversion import (
+    HML_JOINT_NAMES,
+    TARGET_FPS,
+    joint_mapping,
+)
 
 HML_FEATURE_DIM = 263
 HML_ROTATION_START = 4 + (len(HML_JOINT_NAMES) - 1) * 3
@@ -263,6 +267,35 @@ def _interpolate_leaf_rotations(
     return result, driven
 
 
+def _feet_at_rest(
+    motion: BVHMotion, feet: list[int], up_axis: str, scale: float, *, at_end: bool
+) -> bool:
+    positions, _ = world_positions(motion)
+    axis = "XYZ".index(up_axis)
+    boundary = positions[-1 if at_end else 0, feet, axis]
+    floor = positions[:, feet, axis].min()
+    window = positions[-6:, feet] if at_end else positions[:6, feet]
+    speed = np.linalg.norm(np.diff(window, axis=0), axis=-1) * scale / motion.frame_time
+    return bool(np.all((boundary - floor) * scale < 0.035) and np.all(speed < 0.35))
+
+
+def _interpolate_stance_legs(
+    local: np.ndarray, start: np.ndarray, end: np.ndarray, template: BVHMotion, feet: list[int]
+) -> np.ndarray:
+    result = local.copy()
+    times = np.linspace(0, 1, len(local) + 2)[1:-1]
+    joints = set()
+    for foot in feet:
+        index = foot
+        while index > 0:
+            joints.add(index)
+            index = template.joints[index].parent
+    for index in joints:
+        endpoints = Rotation.from_matrix(np.stack((start[index], end[index])))
+        result[:, index] = Slerp([0, 1], endpoints)(times).as_matrix()
+    return result
+
+
 def _smoothstep(value: np.ndarray) -> np.ndarray:
     return value * value * (3 - 2 * value)
 
@@ -334,7 +367,7 @@ def _resample_transition(
     root_with_b0: np.ndarray, local_with_b0: np.ndarray, frame_time: float
 ) -> tuple[np.ndarray, np.ndarray]:
     transition_frames = len(root_with_b0) - 1
-    frame_count = max(3, int(round((transition_frames / TARGET_FPS) / frame_time)))
+    frame_count = max(1, round((transition_frames / TARGET_FPS) / frame_time))
     source_times = np.arange(len(root_with_b0), dtype=np.float64) / TARGET_FPS
     target_times = np.arange(frame_count, dtype=np.float64) * frame_time
     return _resample_at_times(root_with_b0, local_with_b0, source_times, target_times)
@@ -363,7 +396,7 @@ def _resample_motion(
     if np.isclose(source_frame_time, target_frame_time, rtol=1e-6, atol=1e-9):
         return root, local
     source_times = np.arange(len(root), dtype=np.float64) * source_frame_time
-    frame_count = max(3, int(round(len(root) * source_frame_time / target_frame_time)))
+    frame_count = max(3, round(len(root) * source_frame_time / target_frame_time))
     target_times = np.minimum(np.arange(frame_count, dtype=np.float64) * target_frame_time, source_times[-1])
     return _resample_at_times(root, local, source_times, target_times)
 
@@ -396,6 +429,29 @@ def _motion_frames(template: BVHMotion, root: np.ndarray, local: np.ndarray) -> 
                     frames[:, destination] = angles[:, rotation_column]
                     rotation_column += 1
     return frames
+
+
+def _ground_transition(
+    template: BVHMotion,
+    a_last: np.ndarray,
+    bridge: np.ndarray,
+    b_first: np.ndarray,
+    up_axis: str,
+) -> np.ndarray:
+    frames = np.concatenate((a_last[None], bridge, b_first[None]))
+    positions, _ = world_positions(BVHMotion(template.joints, frames, template.frame_time))
+    mapping, _, _ = joint_mapping(template)
+    feet = [mapping[HML_JOINT_NAMES.index(name)] for name in ("left_foot", "right_foot")]
+    axis = "XYZ".index(up_axis)
+    support_height = positions[:, feet, axis].min(axis=1)
+    floor = np.linspace(support_height[0], support_height[-1], len(frames))[1:-1]
+    root = template.joints[0]
+    channel = f"{up_axis}position"
+    if channel not in root.channels:
+        raise ValueError(f"根关节缺少 {channel} 通道，无法校正过渡段脚部高度")
+    grounded = bridge.copy()
+    grounded[:, root.start + root.channels.index(channel)] += floor - support_height[1:-1]
+    return grounded
 
 
 def _write_with_template(source: bytes, frames: np.ndarray, frame_time: float) -> bytes:
@@ -434,13 +490,22 @@ def export_transition_bvh(
     a_frames = template.frames.copy()
     a_root, a_local = _motion_components(template)
 
-    b_drop = source_b_metadata["removed_initial_frames"]
     b_root, b_local = _motion_components(following)
-    b_root, b_local = b_root[b_drop:], b_local[b_drop:]
     b_root, b_local = _resample_motion(b_root, b_local, following.frame_time, template.frame_time)
-    b_root, b_local = _align_following(
-        b_root, b_local, target[hml_end, 0], generated_local[hml_end, 0]
-    )
+    b_root = b_root + target[hml_end, 0] - b_root[0]
+
+    generated_root = Rotation.from_matrix(bridge_local[:, 0])
+    if len(bridge_local) == 1:
+        bridge_local[0, 0] = b_local[0, 0]
+    else:
+        start_correction = Rotation.from_matrix(a_local[-1, 0]) * generated_root[0].inv()
+        end_correction = Rotation.from_matrix(b_local[0, 0]) * generated_root[-1].inv()
+        corrections = Slerp(
+            [0, 1],
+            Rotation.from_quat(np.stack((start_correction.as_quat(), end_correction.as_quat()))),
+        )(np.linspace(0, 1, len(bridge_local)))
+        bridge_local[:, 0] = (corrections * generated_root).as_matrix()
+
     bridge_local, interpolated_leaf_joints = _interpolate_leaf_rotations(
         bridge_local, a_local[-1], b_local[0], template
     )
@@ -457,7 +522,20 @@ def export_transition_bvh(
     bridge_root, bridge_local = _resample_transition(
         stitched_root[2:-1], stitched_local[2:-1], template.frame_time
     )
+    mapping, _, _ = joint_mapping(template)
+    feet = [mapping[HML_JOINT_NAMES.index(name)] for name in ("left_foot", "right_foot")]
+    up_axis = source_a_metadata["source_up_axis"]
+    scale = source_a_metadata["source_scale_to_meters"]
+    if _feet_at_rest(template, feet, up_axis, scale, at_end=True) and _feet_at_rest(
+        following, feet, up_axis, scale, at_end=False
+    ):
+        bridge_local = _interpolate_stance_legs(
+            bridge_local, a_local[-1], b_local[0], template, feet
+        )
     bridge_frames = _motion_frames(template, bridge_root, bridge_local)
+    bridge_frames = _ground_transition(
+        template, a_frames[-1], bridge_frames, b_frames[0], up_axis,
+    )
 
     frames = np.concatenate((a_frames, bridge_frames, b_frames))
     start, end = len(a_frames), len(a_frames) + len(bridge_frames)
