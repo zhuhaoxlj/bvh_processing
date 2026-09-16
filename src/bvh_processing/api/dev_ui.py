@@ -1,7 +1,7 @@
-"""本地自测页面：上传 BVH → 调用真实 /api/v1/bvh/process → 取回结果给 three.js 预览。
+"""本地自测页面：调用真实 BVH 处理/合并接口，再用 three.js 预览结果。
 
 仅在 ``BVH_DEV_UI=1`` 时由 :func:`bvh_processing.main.create_app` 挂载，供本地联调使用。
-它把上传的文件暂存成可下载 URL，并充当 ``/api/v1/bvh/process`` 的进度与结果回调接收方，
+它把上传的文件暂存成可下载 URL，并充当处理/合并接口的进度与结果回调接收方，
 因此走的是与业务侧完全相同的接口链路（下载、SHA-256 校验、格式识别、回调）。
 单 worker 运行，请勿在生产环境开启。
 
@@ -39,6 +39,7 @@ router = APIRouter(tags=["dev-ui"])
 
 _DEV_UI_ROOT = Path(__file__).resolve().parent.parent / "dev_ui"
 INDEX_HTML = _DEV_UI_ROOT / "index.html"
+MERGE_HTML = _DEV_UI_ROOT / "merge.html"
 STATIC_ROOT = _DEV_UI_ROOT / "static"
 
 _UPLOAD_CHUNK_SIZE = 1024 * 1024
@@ -300,6 +301,21 @@ async def dev_ui_page() -> FileResponse:
         INDEX_HTML,
         media_type="text/html; charset=utf-8",
         # 自测页面改动频繁，禁止缓存，避免刷新后拿到的还是旧版本。
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.api_route(
+    "/dev/bvh/merge",
+    methods=["GET", "HEAD"],
+    summary="[自测] BVH 时间轴合并测试页面",
+    description="批量上传 BVH、拖动片段调整间隔、调用 /api/v1/bvh/merge 并预览结果。",
+    include_in_schema=False,
+)
+async def dev_ui_merge_page() -> FileResponse:
+    return FileResponse(
+        MERGE_HTML,
+        media_type="text/html; charset=utf-8",
         headers={"Cache-Control": "no-store"},
     )
 

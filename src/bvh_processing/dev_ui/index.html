@@ -39,6 +39,25 @@
   header h1 { font-size: 15px; margin: 0; font-weight: 600; }
   header .hint { color: var(--muted); font-size: 12px; }
   header .spacer { flex: 1; }
+  .mode-nav {
+    align-self: stretch;
+    display: flex;
+    align-items: end;
+    gap: 2px;
+    margin-left: 12px;
+  }
+  .mode-nav a {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    padding: 0 13px;
+    color: var(--muted);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    font-size: 12px;
+  }
+  .mode-nav a:hover { color: var(--text); background: #18202a; }
+  .mode-nav a.active { color: var(--text); border-bottom-color: var(--accent); }
   .pill {
     padding: 3px 10px;
     border-radius: 999px;
@@ -254,12 +273,21 @@
     padding: 0 8px 6px;
   }
   details.exchange .actions button { flex: none; font-size: 11px; padding: 2px 8px; }
+  @media (max-width: 900px) {
+    header .hint { display: none; }
+    .mode-nav { margin-left: 0; }
+    #pageVersion { display: none; }
+  }
 </style>
 </head>
 <body>
 <header>
   <h1>BVH 处理自测台</h1>
   <span class="hint">上传 → <code>/api/v1/bvh/process</code> → 回调取结果 → three.js 预览</span>
+  <nav class="mode-nav" aria-label="测试台模式">
+    <a class="active" href="/dev/bvh" aria-current="page">单文件处理</a>
+    <a href="/dev/bvh/merge">多段合并</a>
+  </nav>
   <span class="spacer"></span>
   <span class="hint" id="pageVersion"></span>
   <span class="pill" id="statusPill">未开始</span>
@@ -288,6 +316,7 @@
       <button id="downloadBtn" disabled>下载处理结果</button>
       <button id="clearBtn">清空结果</button>
     </div>
+    <a id="downloadAnchor" hidden></a>
 
     <dl class="meta" id="meta"></dl>
 
@@ -948,6 +977,7 @@ window.addEventListener('keydown', (event) => {
 
 let selectedFile = null;
 let resultUrl = null;
+let resultFilename = null;
 let busy = false;
 
 function selectedOptions() {
@@ -999,6 +1029,7 @@ drop.addEventListener('drop', (event) => {
 async function handleFile(file) {
   selectedFile = file;
   resultUrl = null;
+  resultFilename = null;
   resultViewer.clear();
   syncTimelineRange();
   clearExchanges();
@@ -1019,12 +1050,22 @@ async function handleFile(file) {
 
 $('clearBtn').addEventListener('click', () => {
   resultUrl = null;
+  resultFilename = null;
   resultViewer.clear();
   $('downloadBtn').disabled = true;
   $('resultInfo').textContent = '';
   setStatus('未开始', '');
   syncTimelineRange();
   logLine('已清空处理结果');
+});
+
+$('downloadBtn').addEventListener('click', () => {
+  if (!resultUrl || !resultFilename) return;
+  const link = $('downloadAnchor');
+  link.href = resultUrl;
+  link.download = resultFilename;
+  link.click();
+  logLine(`开始下载 ${resultFilename}`, 'info');
 });
 
 $('runBtn').addEventListener('click', () => {
@@ -1133,6 +1174,7 @@ async function run() {
   const resultText = await resultResponse.text();
   const info = resultViewer.load(resultText);
   resultUrl = task.result.url;
+  resultFilename = task.result.filename;
   $('resultInfo').textContent =
     `${task.result.filename} · ${info.bones} 关节 · ${info.duration.toFixed(3)}s`;
   syncTimelineRange();

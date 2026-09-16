@@ -72,6 +72,9 @@ def _upload(client: httpx.Client, content: bytes = BVH_CONTENT, name: str = "wal
 def test_dev_ui_page_and_assets_are_served_when_enabled() -> None:
     with TestClient(_dev_app(_dev_settings())) as client:
         page = client.get("/dev/bvh")
+        merge_page = client.get("/dev/bvh/merge")
+        merge_css = client.get("/dev/bvh/static/merge.css")
+        merge_js = client.get("/dev/bvh/static/merge.js")
         head = client.head("/dev/bvh")
         three = client.get("/dev/bvh/static/three.module.min.js")
         loader = client.get("/dev/bvh/static/BVHLoader.js")
@@ -81,9 +84,23 @@ def test_dev_ui_page_and_assets_are_served_when_enabled() -> None:
     # 页面改动频繁，必须禁用缓存，否则刷新后可能还是旧版本。
     assert page.headers["cache-control"] == "no-store"
     assert head.status_code == 200
+    assert merge_page.status_code == 200
+    assert merge_page.headers["cache-control"] == "no-store"
+    assert 'id="timelineStage"' in merge_page.text
+    assert 'id="mergeButton"' in merge_page.text
+    assert 'id="sourceCanvas"' in merge_page.text
+    assert 'id="resultCanvas"' in merge_page.text
+    assert merge_css.status_code == 200
+    assert merge_js.status_code == 200
+    assert "/api/v1/bvh/merge" in merge_js.text
     assert "'/api/v1/bvh/process'" in page.text
+    assert 'class="mode-nav"' in page.text
+    assert 'href="/dev/bvh/merge"' in page.text
+    assert 'aria-current="page">单文件处理' in page.text
     assert 'id="canvasSource"' in page.text
     assert 'id="canvasResult"' in page.text
+    assert 'id="downloadAnchor"' in page.text
+    assert "link.download = resultFilename" in page.text
     # 共享进度条 + 视角同步开关
     assert 'id="timeline"' in page.text
     assert 'id="readout"' in page.text
@@ -95,6 +112,7 @@ def test_dev_ui_page_and_assets_are_served_when_enabled() -> None:
 def test_dev_ui_is_not_mounted_by_default() -> None:
     with TestClient(create_app(Settings(_env_file=None))) as client:
         assert client.get("/dev/bvh").status_code == 404
+        assert client.get("/dev/bvh/merge").status_code == 404
         assert client.get("/", follow_redirects=False).status_code == 404
         assert client.post("/api/v1/dev/bvh/uploads").status_code == 404
         assert client.get("/api/v1/dev/bvh/tasks/devtask-1234").status_code == 404

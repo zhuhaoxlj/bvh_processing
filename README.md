@@ -45,8 +45,12 @@ MDM 模型会在第一个非零过渡任务中延迟加载并驻留显存。服�
 
 ## 本地自测页面（BVH_DEV_UI）
 
-本地联调时可以打开一个自带的前端页面：上传 BVH、勾选 `handleOptions`、调用真实的
-`POST /api/v1/bvh/process`，再用 three.js 并排预览原始动作和处理结果。
+本地联调时可以打开两个自带的前端页面：
+
+- `/dev/bvh`：上传单个 BVH、勾选 `handleOptions`、调用真实的
+  `POST /api/v1/bvh/process`，再用 three.js 并排预览原始动作和处理结果。
+- `/dev/bvh/merge`：一次拖入多个 BVH，在单轨时间轴上拖动片段调整间隔，调用真实的
+  `POST /api/v1/bvh/merge`，并预览当前片段和合并结果。
 
 在本地 `.env` 里开启：
 
@@ -76,6 +80,11 @@ uv run uvicorn bvh_processing.main:app --host 0.0.0.0 --port 9001
 3. 接口的进度回调打到 `/api/v1/dev/bvh/progress-callback/{taskId}`，最终结果打到
    `/api/v1/dev/bvh/callback/{taskId}`，页面轮询 `/api/v1/dev/bvh/tasks/{taskId}` 展示进度；
 4. 处理完成后页面取回 `*_processed.bvh` 并渲染骨架。
+
+合并页面复用同一套暂存和回调端点。页面按时间轴位置自动生成
+`timelineOffsetSec` 和各片段的 `gapAfterSec`；拖动某一片段时，它后面的片段会一起移动，
+因此不会产生重叠。非零间隔限制为 0.05～7.8 秒，超出范围时页面会直接标红并禁止提交。
+点击“紧凑排列”可把全部间隔归零，用于验证不经过 MDM 补间的直接拼接流程。
 
 页面顶部的工具条用于对比：
 

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>BVH 时间轴合并测试台</title>
+<link rel="stylesheet" href="/dev/bvh/static/merge.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <strong>BVH MERGE LAB</strong>
+    <span>多段动作合并测试台</span>
+  </div>
+  <nav aria-label="测试台模式">
+    <a href="/dev/bvh">单文件处理</a>
+    <a class="active" href="/dev/bvh/merge" aria-current="page">多段合并</a>
+  </nav>
+  <span class="status" id="status">等待 BVH</span>
+</header>
+
+<main>
+  <section class="preview-grid" aria-label="BVH 预览">
+    <article class="viewer">
+      <div class="viewer-head">
+        <div><span class="index">SOURCE</span><strong>当前片段</strong></div>
+        <span id="sourceInfo">未选择</span>
+      </div>
+      <div class="canvas-wrap"><canvas id="sourceCanvas"></canvas></div>
+    </article>
+    <article class="viewer result-viewer">
+      <div class="viewer-head">
+        <div><span class="index">MERGED</span><strong>合并结果</strong></div>
+        <span id="resultInfo">尚未生成</span>
+      </div>
+      <div class="canvas-wrap"><canvas id="resultCanvas"></canvas></div>
+    </article>
+  </section>
+
+  <section class="transport" aria-label="预览播放控制">
+    <button class="icon-button" id="playButton" type="button" title="播放或暂停" aria-label="播放或暂停">Ⅱ</button>
+    <input id="previewProgress" type="range" min="0" max="1000" value="0" aria-label="预览进度">
+    <output id="previewTime">0:00.00 / 0:00.00</output>
+    <button class="icon-button" id="resetViewButton" type="button" title="重置预览视角" aria-label="重置预览视角">⌖</button>
+  </section>
+
+  <section class="timeline-panel">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">COMPOSITION</span>
+        <h1>动作时间轴</h1>
+      </div>
+      <div class="toolbar">
+        <label class="file-button">
+          <input id="fileInput" type="file" accept=".bvh" multiple>
+          <span aria-hidden="true">＋</span> 添加 BVH
+        </label>
+        <button id="compactButton" type="button" title="移除全部片段间隔">紧凑排列</button>
+        <label class="zoom-control">缩放 <input id="zoomInput" type="range" min="50" max="180" value="90"></label>
+        <button class="primary" id="mergeButton" type="button" disabled>调用 merge 接口</button>
+        <button id="downloadButton" type="button" disabled>下载结果</button>
+      </div>
+    </div>
+
+    <div class="timeline-scroll" id="timelineScroll">
+      <div class="timeline-stage" id="timelineStage">
+        <div class="ruler" id="ruler"></div>
+        <div class="track-label"><span>01</span><strong>BVH 动作序列</strong></div>
+        <div class="track" id="track">
+          <div class="drop-empty" id="dropEmpty">
+            <strong>拖入多个 .bvh 文件</strong>
+            <span>片段将按文件顺序排列</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="timeline-foot">
+      <span id="timelineSummary">0 个片段</span>
+      <span>拖动片段可调整它与前一段的间隔</span>
+    </div>
+  </section>
+
+  <section class="lower-grid">
+    <div class="inspector">
+      <div class="subhead"><span>片段属性</span><button class="danger-text" id="removeButton" type="button" disabled>删除片段</button></div>
+      <dl id="segmentMeta"><dt>状态</dt><dd>选择时间轴中的片段</dd></dl>
+    </div>
+    <div class="request-panel">
+      <div class="subhead"><span>merge 请求</span><button id="copyButton" type="button">复制 JSON</button></div>
+      <pre id="payloadPreview">{}</pre>
+    </div>
+    <div class="activity-panel">
+      <div class="subhead"><span>运行记录</span><button id="clearLogButton" type="button">清空</button></div>
+      <pre id="activityLog"></pre>
+    </div>
+  </section>
+</main>
+
+<a id="downloadAnchor" hidden></a>
+<script type="importmap">
+{"imports":{"three":"/dev/bvh/static/three.module.min.js"}}
+</script>
+<script type="module" src="/dev/bvh/static/merge.js"></script>
+</body>
+</html>
