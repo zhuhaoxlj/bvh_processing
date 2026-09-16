@@ -69,7 +69,7 @@ def process_bvh(
         2: smooth_bvh,
         3: lock_bvh_feet,
         4: optimize_bvh_loop,
-        5: orient_bvh_facing_to_x,
+        5: orient_bvh_facing_to_z,
     }
     current = downloaded
     try:
@@ -459,8 +459,8 @@ def _motion_start_index(values: list[list[float]], rest_channels: set[int]) -> i
     return index if index < len(values) else 0
 
 
-def orient_bvh_facing_to_x(downloaded: DownloadedBvh) -> DownloadedBvh:
-    """绕世界 Y 轴整体旋转动作，使人体朝向对准 X 轴正方向。
+def orient_bvh_facing_to_z(downloaded: DownloadedBvh) -> DownloadedBvh:
+    """绕世界 Y 轴整体旋转动作，使人体朝向对准 Z 轴正方向。
 
     朝向由左右大腿根（髋）关节的连线确定：右髋指向左髋的反方向是身体右侧，
     再取 ``up × right`` 得到面向。旋转角**只由第一帧决定**（跳过开头静止的 T-pose
@@ -508,9 +508,9 @@ def orient_bvh_facing_to_x(downloaded: DownloadedBvh) -> DownloadedBvh:
             f"第 {reference_index + 1} 帧的左右髋关节连线退化，无法判断人体朝向"
         )
 
-    # 绕 Y 轴旋转 angle 后朝向落到 +X：朝向 = up × right = (right_z, 0, -right_x)，
-    # 其 XZ 极角为 atan2(-right_x, right_z)。
-    angle = math.degrees(math.atan2(-right_x, right_z))
+    # 朝向 = up × right = (right_z, 0, -right_x)，其 XZ 极角为
+    # atan2(-right_x, right_z)。绕 Y 轴旋转会减小该极角，因此减去 +Z 的 90°。
+    angle = math.degrees(math.atan2(-right_x, right_z)) - 90.0
     rotation = _axis_rotation("Y", angle)
     euler_order = "".join(axis for _, axis in rotation_channels)
 

@@ -11,7 +11,7 @@ from bvh_processing.services.processing import (
     denoise_bvh,
     lock_bvh_feet,
     optimize_bvh_loop,
-    orient_bvh_facing_to_x,
+    orient_bvh_facing_to_z,
     process_bvh,
     smooth_bvh,
     trim_bvh,
@@ -234,29 +234,29 @@ def _world_facing(downloaded: DownloadedBvh, index: int = 0) -> tuple[float, flo
     return float(facing[0]), float(facing[1])
 
 
-def test_orient_bvh_facing_to_x_turns_identity_pose_to_positive_x() -> None:
-    # 根旋转为 0 时，该骨架面向 +Z，需要绕 Y 轴转 90° 才对上 +X。
+def test_orient_bvh_facing_to_z_keeps_identity_pose_facing_positive_z() -> None:
+    # 根旋转为 0 时，该骨架已面向 +Z，不需要额外旋转。
     source = _humanoid([[0, 100, 0, 0, 0, 0], [0, 100, 0, 0, 0, 0]])
 
-    result = orient_bvh_facing_to_x(source)
+    result = orient_bvh_facing_to_z(source)
 
-    assert _world_facing(result) == pytest.approx((1.0, 0.0), abs=1e-9)
+    assert _world_facing(result) == pytest.approx((0.0, 1.0), abs=1e-9)
     rotations = [frame[3:6] for frame in _frames(result)]
-    assert rotations[0][2] == pytest.approx(90.0, abs=1e-6)
+    assert rotations[0][2] == pytest.approx(0.0, abs=1e-6)
     result.content.close()
 
 
-def test_orient_bvh_facing_to_x_aligns_regardless_of_input_rotation() -> None:
+def test_orient_bvh_facing_to_z_aligns_regardless_of_input_rotation() -> None:
     for y_rotation in (-135.0, -35.0, 47.0, 180.0):
         source = _humanoid([[0, 100, 0, 0, 0, y_rotation]])
 
-        result = orient_bvh_facing_to_x(source)
+        result = orient_bvh_facing_to_z(source)
 
-        assert _world_facing(result) == pytest.approx((1.0, 0.0), abs=1e-9), y_rotation
+        assert _world_facing(result) == pytest.approx((0.0, 1.0), abs=1e-9), y_rotation
         result.content.close()
 
 
-def test_orient_bvh_facing_to_x_keeps_motion_shape() -> None:
+def test_orient_bvh_facing_to_z_keeps_motion_shape() -> None:
     source = _humanoid(
         [
             [0, 100, 0, 0, 0, 0],
@@ -265,7 +265,7 @@ def test_orient_bvh_facing_to_x_keeps_motion_shape() -> None:
         ]
     )
 
-    result = orient_bvh_facing_to_x(source)
+    result = orient_bvh_facing_to_z(source)
 
     before_left, before_right = _world_hip_joints(source)
     after_left, after_right = _world_hip_joints(result)
@@ -288,53 +288,53 @@ def test_orient_bvh_facing_to_x_keeps_motion_shape() -> None:
     result.content.close()
 
 
-def test_orient_bvh_facing_to_x_rotates_root_translation_around_origin() -> None:
-    # 面向 +Z、站在 (0, 100, 50)：转到 +X 后位置应变成 (50, 100, 0)。
-    source = _humanoid([[0, 100, 50, 0, 0, 0]])
+def test_orient_bvh_facing_to_z_rotates_root_translation_around_origin() -> None:
+    # 面向 +X、站在 (0, 100, 50)：转到 +Z 后位置应变成 (-50, 100, 0)。
+    source = _humanoid([[0, 100, 50, 0, 0, 90]])
 
-    result = orient_bvh_facing_to_x(source)
+    result = orient_bvh_facing_to_z(source)
 
-    assert _frames(result)[0][:3] == pytest.approx([50.0, 100.0, 0.0], abs=1e-6)
+    assert _frames(result)[0][:3] == pytest.approx([-50.0, 100.0, 0.0], abs=1e-6)
     result.content.close()
 
 
-def test_orient_bvh_facing_to_x_uses_first_pose_frame() -> None:
+def test_orient_bvh_facing_to_z_uses_first_pose_frame() -> None:
     """朝向只由第一帧决定：后面几帧各自怎么转都不影响旋转角。"""
     facing_30 = _humanoid([[0, 100, 0, 0, 0, 30], [0, 100, 0, 0, 0, -60]])
     facing_30_other = _humanoid([[0, 100, 0, 0, 0, 30], [0, 100, 0, 0, 0, 170]])
 
-    first = _frames(orient_bvh_facing_to_x(facing_30))[0][3:6]
-    second = _frames(orient_bvh_facing_to_x(facing_30_other))[0][3:6]
+    first = _frames(orient_bvh_facing_to_z(facing_30))[0][3:6]
+    second = _frames(orient_bvh_facing_to_z(facing_30_other))[0][3:6]
 
-    # 第 0 帧对齐到 +X；第 1 帧只是跟着转，不参与决定旋转角。
+    # 第 0 帧对齐到 +Z；第 1 帧只是跟着转，不参与决定旋转角。
     assert first == pytest.approx(second, abs=1e-9)
-    assert _world_facing(orient_bvh_facing_to_x(facing_30), 0) == pytest.approx(
-        (1.0, 0.0), abs=1e-9
+    assert _world_facing(orient_bvh_facing_to_z(facing_30), 0) == pytest.approx(
+        (0.0, 1.0), abs=1e-9
     )
     assert _world_facing(facing_30, 1) != pytest.approx(
-        _world_facing(orient_bvh_facing_to_x(facing_30), 1), abs=1e-3
+        _world_facing(orient_bvh_facing_to_z(facing_30), 1), abs=1e-3
     )
 
 
-def test_orient_bvh_facing_to_x_skips_leading_t_pose_frame() -> None:
+def test_orient_bvh_facing_to_z_skips_leading_t_pose_frame() -> None:
     """开头是静止 T-pose（旋转全 0）时，基准帧顺延到第 1 帧；T-pose 帧只是跟着转。"""
     source = _humanoid([[0, 100, 0, 0, 0, 0], [0, 100, 0, 0, 0, 30]])
 
-    result = orient_bvh_facing_to_x(source)
+    result = orient_bvh_facing_to_z(source)
 
-    # 第 1 帧（真正摆姿势的那帧）对齐到 +X：它原本是 60°，所以整段转了 60°。
-    assert _world_facing(result, 1) == pytest.approx((1.0, 0.0), abs=1e-9)
-    # T-pose 帧原本面向 +Z（90°），跟着转 60° 后变成 30°，而不是自己也被对齐。
+    # 第 1 帧（真正摆姿势的那帧）对齐到 +Z：它原本偏了 30°，所以整段转了 -30°。
+    assert _world_facing(result, 1) == pytest.approx((0.0, 1.0), abs=1e-9)
+    # T-pose 帧原本面向 +Z，跟着转 -30° 后偏到 120°，而不是自己也被对齐。
     assert _world_facing(result, 0) == pytest.approx(
-        (math.cos(math.radians(30)), math.sin(math.radians(30))), abs=1e-9
+        (math.cos(math.radians(120)), math.sin(math.radians(120))), abs=1e-9
     )
     result.content.close()
 
 
-def test_orient_bvh_facing_to_x_requires_hips_and_rotation_channels() -> None:
+def test_orient_bvh_facing_to_z_requires_hips_and_rotation_channels() -> None:
     without_hips = _downloaded([[0, 0]])
     with pytest.raises(BvhServiceError) as missing_hips:
-        orient_bvh_facing_to_x(without_hips)
+        orient_bvh_facing_to_z(without_hips)
     assert missing_hips.value.code == "cannot_orient_bvh"
     assert "髋" in missing_hips.value.message
 
@@ -342,7 +342,7 @@ def test_orient_bvh_facing_to_x_requires_hips_and_rotation_channels() -> None:
         [[0, 100, 0]], root_channels="Xposition Yposition Zposition"
     )
     with pytest.raises(BvhServiceError) as missing_rotation:
-        orient_bvh_facing_to_x(without_rotation)
+        orient_bvh_facing_to_z(without_rotation)
     assert missing_rotation.value.code == "cannot_orient_bvh"
 
 
@@ -351,5 +351,5 @@ def test_process_bvh_applies_orient_as_option_five() -> None:
 
     result = process_bvh(source, [1, 5])
 
-    assert _world_facing(result) == pytest.approx((1.0, 0.0), abs=1e-6)
+    assert _world_facing(result) == pytest.approx((0.0, 1.0), abs=1e-6)
     result.content.close()

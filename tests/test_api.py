@@ -243,8 +243,8 @@ Frame Time: 0.05
 """
 
 
-def test_process_option_five_aligns_facing_to_positive_x() -> None:
-    """handleOptions=5 把根节点绕 Y 轴转向 +X：该骨架初始面向 +Z，因此应转 90°。"""
+def test_process_option_five_aligns_facing_to_positive_z() -> None:
+    """handleOptions=5 把根节点绕 Y 轴转向 +Z：该骨架初始面向 +Z，因此无需旋转。"""
     humanoid_url = "https://minio.example.com/motions/humanoid.bvh"
     app = create_app()
 
@@ -280,13 +280,13 @@ def test_process_option_five_aligns_facing_to_positive_x() -> None:
 
     progress_body = json.loads(progress_callback.calls.last.request.content)
     assert progress_body["step"] == 6
-    assert progress_body["stepCode"] == "FACE_X"
+    assert progress_body["stepCode"] == "FACE_Z"
     assert progress_body["progress"] == 95
 
     callback_body = callback.calls.last.request.content
     assert b'filename="humanoid_processed.bvh"' in callback_body
-    # 根通道变为 Z=0、X=0、Y=90，其余通道保持 0
-    assert b"0 100 0 0 0 90 0 0 0 0 0 0 0 0 0 0 0 0" in callback_body
+    # 根通道和其余通道均保持 0。
+    assert b"0 100 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0" in callback_body
 
 
 def test_retarget_accepts_task_and_callbacks_with_npz_and_json(
