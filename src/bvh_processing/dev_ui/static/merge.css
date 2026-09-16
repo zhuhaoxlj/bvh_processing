@@ -74,12 +74,13 @@ nav a.active { color: var(--text); border-bottom-color: var(--orange); }
 .status.ok { color: var(--green); }
 .status.error { color: var(--red); }
 
-main { padding: 14px; display: grid; gap: 10px; }
+main { padding: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; height: min(36vh, 360px); min-height: 250px; }
 .viewer, .timeline-panel, .lower-grid {
   border: 1px solid var(--line);
   background: var(--surface);
 }
+.timeline-panel { min-width: 0; }
 .viewer { min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 .viewer-head {
   min-height: 42px;
@@ -143,6 +144,25 @@ h1 { margin: 2px 0 0; font-size: 18px; line-height: 1.2; }
 .track-label span { color: var(--orange); font: 10px "IBM Plex Mono", monospace; }
 .track-label strong { margin-top: 3px; font-size: 12px; }
 .track { height: 86px; margin-left: var(--track-label); position: relative; background-image: linear-gradient(90deg, #252c34 1px, transparent 1px); background-size: 22.5px 100%; }
+.timeline-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid var(--green);
+  z-index: 6;
+  pointer-events: none;
+}
+.timeline-playhead[hidden] { display: none; }
+.timeline-playhead::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -7px;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 9px solid var(--green);
+}
 .drop-empty {
   position: absolute;
   inset: 11px 14px;

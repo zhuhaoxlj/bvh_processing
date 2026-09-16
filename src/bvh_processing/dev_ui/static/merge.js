@@ -163,10 +163,31 @@ function previewDuration() {
   return Math.max(sourceViewer.duration, resultViewer.duration, 0);
 }
 
-function updateTransport() {
+function updateTimelinePlayhead(follow = false) {
+  const playhead = $('timelinePlayhead');
+  const selected = clips.find((clip) => clip.id === selectedId);
+  playhead.hidden = !clips.length || (!resultViewer.loaded && (!selected || !sourceViewer.loaded));
+  if (playhead.hidden) return;
+
+  const time = resultViewer.loaded
+    ? previewProgress * previewDuration()
+    : selected.start + previewProgress * sourceViewer.duration;
+  playhead.style.left = `calc(var(--track-label) + ${time * pixelsPerSecond}px)`;
+
+  if (follow) {
+    const scroll = $('timelineScroll');
+    const x = $('track').offsetLeft + time * pixelsPerSecond;
+    if (x < scroll.scrollLeft + 20 || x > scroll.scrollLeft + scroll.clientWidth - 20) {
+      scroll.scrollLeft = Math.max(0, x - scroll.clientWidth / 2);
+    }
+  }
+}
+
+function updateTransport(follow = false) {
   $('previewProgress').value = String(Math.round(previewProgress * 1000));
   $('previewTime').textContent = `${formatTime(previewProgress * previewDuration())} / ${formatTime(previewDuration())}`;
   $('playButton').textContent = playing ? 'Ⅱ' : '▶';
+  updateTimelinePlayhead(follow);
 }
 
 function animate(now) {
@@ -177,7 +198,7 @@ function animate(now) {
   if (playing && duration > 0) previewProgress = (previewProgress + delta / duration) % 1;
   sourceViewer.render(previewProgress);
   resultViewer.render(previewProgress);
-  updateTransport();
+  updateTransport(playing);
 }
 requestAnimationFrame(animate);
 
@@ -185,7 +206,7 @@ $('playButton').addEventListener('click', () => { playing = !playing; updateTran
 $('previewProgress').addEventListener('input', (event) => {
   previewProgress = Number(event.target.value) / 1000;
   playing = false;
-  updateTransport();
+  updateTransport(true);
 });
 $('resetViewButton').addEventListener('click', () => {
   sourceViewer.resetView();
@@ -273,6 +294,7 @@ function selectClip(id) {
     }
   }
   renderTimeline();
+  updateTransport(true);
   renderInspector();
 }
 
@@ -384,6 +406,7 @@ function renderTimeline() {
   const error = timelineError();
   $('mergeButton').disabled = busy || clips.length === 0 || Boolean(error);
   if (error && !busy) setStatus(error, 'error');
+  updateTimelinePlayhead();
 }
 
 function renderAll() {
@@ -440,7 +463,8 @@ for (const type of ['dragenter', 'dragover']) {
 }
 for (const type of ['dragleave', 'drop']) $('track').addEventListener(type, () => $('track').classList.remove('drag-over'));
 $('track').addEventListener('drop', (event) => { event.preventDefault(); addFiles(event.dataTransfer.files); });
-$('zoomInput').addEventListener('input', (event) => { pixelsPerSecond = Number(event.target.value); renderTimeline(); });
+$('zoomInput').addEventListener('input', (event) => { pixelsPerSecond = Number(event.target.value); renderTimeline(); updateTimelinePlayhead(true); });
+window.addEventListener('resize', () => updateTimelinePlayhead(true));
 $('compactButton').addEventListener('click', () => {
   let cursor = 0;
   for (const clip of clips) { clip.start = roundTime(cursor); cursor += clip.duration; }

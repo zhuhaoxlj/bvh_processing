@@ -10,6 +10,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response
+from starlette.types import Scope
 
 from bvh_processing.api import dev_ui
 from bvh_processing.api.routes import router
@@ -17,6 +19,13 @@ from bvh_processing.config import Settings, get_settings
 from bvh_processing.errors import BvhServiceError
 
 logger = logging.getLogger(__name__)
+
+
+class DevStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
 
 @asynccontextmanager
@@ -49,7 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         application.include_router(dev_ui.router)
         application.mount(
             "/dev/bvh/static",
-            StaticFiles(directory=dev_ui.STATIC_ROOT),
+            DevStaticFiles(directory=dev_ui.STATIC_ROOT),
             name="dev-ui-static",
         )
 

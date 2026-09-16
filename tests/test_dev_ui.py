@@ -87,12 +87,18 @@ def test_dev_ui_page_and_assets_are_served_when_enabled() -> None:
     assert merge_page.status_code == 200
     assert merge_page.headers["cache-control"] == "no-store"
     assert 'id="timelineStage"' in merge_page.text
+    assert 'id="timelinePlayhead"' in merge_page.text
+    assert 'merge.css?v=playhead' in merge_page.text
+    assert 'merge.js?v=playhead' in merge_page.text
     assert 'id="mergeButton"' in merge_page.text
     assert 'id="sourceCanvas"' in merge_page.text
     assert 'id="resultCanvas"' in merge_page.text
     assert merge_css.status_code == 200
     assert merge_js.status_code == 200
+    assert merge_css.headers["cache-control"] == "no-store"
+    assert merge_js.headers["cache-control"] == "no-store"
     assert "/api/v1/bvh/merge" in merge_js.text
+    assert "updateTimelinePlayhead(follow)" in merge_js.text
     assert "'/api/v1/bvh/process'" in page.text
     assert 'class="mode-nav"' in page.text
     assert 'href="/dev/bvh/merge"' in page.text

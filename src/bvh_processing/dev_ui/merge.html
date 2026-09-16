@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
 <title>BVH 时间轴合并测试台</title>
-<link rel="stylesheet" href="/dev/bvh/static/merge.css">
+<link rel="stylesheet" href="/dev/bvh/static/merge.css?v=playhead">
 </head>
 <body>
 <header class="topbar">
@@ -73,6 +73,7 @@
             <span>片段将按文件顺序排列</span>
           </div>
         </div>
+        <div class="timeline-playhead" id="timelinePlayhead" aria-hidden="true" hidden></div>
       </div>
     </div>
     <div class="timeline-foot">
@@ -101,6 +102,6 @@
 <script type="importmap">
 {"imports":{"three":"/dev/bvh/static/three.module.min.js"}}
 </script>
-<script type="module" src="/dev/bvh/static/merge.js"></script>
+<script type="module" src="/dev/bvh/static/merge.js?v=playhead"></script>
 </body>
 </html>
