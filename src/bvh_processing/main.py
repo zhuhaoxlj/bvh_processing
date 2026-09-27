@@ -13,7 +13,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 from starlette.types import Scope
 
-from bvh_processing.api import dev_ui
 from bvh_processing.api.routes import router
 from bvh_processing.config import Settings, get_settings
 from bvh_processing.errors import BvhServiceError
@@ -35,12 +34,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         app.state.http_client = client
         if settings.dev_ui:
+            from bvh_processing.api import dev_ui
+
             dev_ui.announce(settings)
         try:
             yield
         finally:
-            # 未启用自测页面时是空操作。
-            dev_ui.reset_store()
+            if settings.dev_ui:
+                from bvh_processing.api import dev_ui
+
+                dev_ui.reset_store()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -55,6 +58,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(router)
 
     if resolved_settings.dev_ui:
+        from bvh_processing.api import dev_ui
+
         application.include_router(dev_ui.router)
         application.mount(
             "/dev/bvh/static",
