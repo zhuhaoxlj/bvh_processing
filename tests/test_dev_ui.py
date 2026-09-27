@@ -73,6 +73,7 @@ def test_dev_ui_page_and_assets_are_served_when_enabled() -> None:
     with TestClient(_dev_app(_dev_settings())) as client:
         page = client.get("/dev/bvh")
         merge_page = client.get("/dev/bvh/merge")
+        foot_page = client.get("/dev/bvh/foot-lock")
         merge_css = client.get("/dev/bvh/static/merge.css")
         merge_js = client.get("/dev/bvh/static/merge.js")
         head = client.head("/dev/bvh")
@@ -88,8 +89,8 @@ def test_dev_ui_page_and_assets_are_served_when_enabled() -> None:
     assert merge_page.headers["cache-control"] == "no-store"
     assert 'id="timelineStage"' in merge_page.text
     assert 'id="timelinePlayhead"' in merge_page.text
-    assert 'merge.css?v=playhead' in merge_page.text
-    assert 'merge.js?v=playhead' in merge_page.text
+    assert "merge.css?v=playhead" in merge_page.text
+    assert "merge.js?v=playhead" in merge_page.text
     assert 'id="mergeButton"' in merge_page.text
     assert 'id="sourceCanvas"' in merge_page.text
     assert 'id="resultCanvas"' in merge_page.text
@@ -102,6 +103,14 @@ def test_dev_ui_page_and_assets_are_served_when_enabled() -> None:
     assert "'/api/v1/bvh/process'" in page.text
     assert 'class="mode-nav"' in page.text
     assert 'href="/dev/bvh/merge"' in page.text
+    assert 'href="/dev/bvh/foot-lock"' in page.text
+    assert foot_page.status_code == 200
+    assert foot_page.headers["cache-control"] == "no-store"
+    assert 'id="footLock"' in foot_page.text
+    assert 'id="canvasSource"' in foot_page.text
+    assert 'id="canvasResult"' in foot_page.text
+    assert "/api/v1/bvh/process" in foot_page.text
+    assert "handleOptions: [3]" in foot_page.text
     assert 'aria-current="page">单文件处理' in page.text
     assert 'id="canvasSource"' in page.text
     assert 'id="canvasResult"' in page.text
@@ -119,6 +128,7 @@ def test_dev_ui_is_not_mounted_by_default() -> None:
     with TestClient(create_app(Settings(_env_file=None))) as client:
         assert client.get("/dev/bvh").status_code == 404
         assert client.get("/dev/bvh/merge").status_code == 404
+        assert client.get("/dev/bvh/foot-lock").status_code == 404
         assert client.get("/", follow_redirects=False).status_code == 404
         assert client.post("/api/v1/dev/bvh/uploads").status_code == 404
         assert client.get("/api/v1/dev/bvh/tasks/devtask-1234").status_code == 404

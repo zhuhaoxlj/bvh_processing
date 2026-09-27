@@ -13,6 +13,7 @@ from scipy.spatial.transform import Rotation
 from bvh_processing.config import Settings
 from bvh_processing.errors import BvhServiceError
 from bvh_processing.services.download import DownloadedBvh
+from bvh_processing.services.foot_lock import FootLockError, lock_feet_to_ground
 from bvh_processing.services.mdm_transition import generate_mdm_merge
 
 _SPOOL_MEMORY_LIMIT = 8 * 1024 * 1024
@@ -343,8 +344,17 @@ def smooth_bvh(
 
 
 def lock_bvh_feet(downloaded: DownloadedBvh) -> DownloadedBvh:
-    """脚步锁定算法占位；当前保持 BVH 数据不变。"""
-    return downloaded
+    """按 SOMA 的速度/jerk 接触检测，把支撑脚落到 Y=0。"""
+    parsed = _parse_bvh(downloaded)
+    values = _motion_values(parsed, downloaded.source_filename)
+    motion = np.asarray(values, dtype=np.float64)
+    try:
+        corrected = lock_feet_to_ground(parsed.hierarchy, motion, parsed.frame_time)
+    except FootLockError as error:
+        raise _invalid_bvh(str(error)) from error
+    if corrected is None:
+        return downloaded
+    return _build_processed_bvh(downloaded, parsed, corrected.tolist())
 
 
 def optimize_bvh_loop(downloaded: DownloadedBvh) -> DownloadedBvh:
@@ -555,9 +565,7 @@ def trim_bvh(
     if end_seconds <= source_in_seconds:
         raise _invalid_bvh("sourceOutSec 必须大于 sourceInSec")
     if source_in_seconds > source_duration + tolerance:
-        raise _invalid_bvh(
-            f"{downloaded.source_filename} 的 sourceInSec 超出 BVH 时长"
-        )
+        raise _invalid_bvh(f"{downloaded.source_filename} 的 sourceInSec 超出 BVH 时长")
     if end_seconds > source_duration + tolerance:
         raise _invalid_bvh(
             f"{downloaded.source_filename} 的 sourceOutSec 超出 BVH 时长"

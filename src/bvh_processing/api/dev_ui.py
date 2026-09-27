@@ -40,6 +40,7 @@ router = APIRouter(tags=["dev-ui"])
 _DEV_UI_ROOT = Path(__file__).resolve().parent.parent / "dev_ui"
 INDEX_HTML = _DEV_UI_ROOT / "index.html"
 MERGE_HTML = _DEV_UI_ROOT / "merge.html"
+FOOT_LOCK_HTML = _DEV_UI_ROOT / "foot_lock.html"
 STATIC_ROOT = _DEV_UI_ROOT / "static"
 
 _UPLOAD_CHUNK_SIZE = 1024 * 1024
@@ -315,6 +316,21 @@ async def dev_ui_page() -> FileResponse:
 async def dev_ui_merge_page() -> FileResponse:
     return FileResponse(
         MERGE_HTML,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.api_route(
+    "/dev/bvh/foot-lock",
+    methods=["GET", "HEAD"],
+    summary="[自测] BVH 脚步锁定对比页面",
+    description="上传 BVH，勾选脚步锁定后调用 /api/v1/bvh/process，并排对比处理前后的贴地效果。",
+    include_in_schema=False,
+)
+async def dev_ui_foot_lock_page() -> FileResponse:
+    return FileResponse(
+        FOOT_LOCK_HTML,
         media_type="text/html; charset=utf-8",
         headers={"Cache-Control": "no-store"},
     )

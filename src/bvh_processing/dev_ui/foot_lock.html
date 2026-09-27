@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>脚步锁定对比</title>
+<style>
+  :root {
+    --bg: #0b0e13;
+    --panel: #131820;
+    --panel-2: #1a212b;
+    --line: #263040;
+    --text: #dbe4ef;
+    --muted: #8b9bb0;
+    --accent: #4da3ff;
+    --ok: #3ddc97;
+    --warn: #ffb454;
+    --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    flex: none;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .hint { color: var(--muted); font-size: 12px; }
+  header .spacer { flex: 1; }
+  .mode-nav { display: flex; align-items: end; gap: 2px; margin-left: 12px; }
+  .mode-nav a {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    padding: 0 13px;
+    color: var(--muted);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    font-size: 12px;
+  }
+  .mode-nav a:hover { color: var(--text); background: #18202a; }
+  .mode-nav a.active { color: var(--text); border-bottom-color: var(--accent); }
+  .pill {
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    font-size: 12px;
+  }
+  .pill.ok { color: var(--ok); border-color: #1d5b45; }
+  .pill.err { color: var(--err); border-color: #6b2b2b; }
+  .pill.busy { color: var(--warn); border-color: #6b5324; }
+  main {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 320px 1fr 1fr;
+    gap: 10px;
+    padding: 10px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .controls { padding: 12px; gap: 12px; overflow-y: auto; }
+  .view h2 {
+    margin: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .view h2 span { font-weight: 400; color: #5f7086; }
+  .canvas-wrap { flex: 1; min-height: 0; position: relative; }
+  canvas { width: 100%; height: 100%; display: block; }
+  .drop {
+    display: block;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    padding: 18px 12px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: #16202c; color: var(--text); }
+  .drop input { display: none; }
+  fieldset {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px 10px;
+    margin: 12px 0;
+  }
+  legend { color: var(--muted); font-size: 12px; padding: 0 4px; }
+  fieldset label { display: block; padding: 3px 0; cursor: pointer; }
+  .note { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+  .legend { display: flex; gap: 10px; color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+  .swatch { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+  .row { display: flex; gap: 8px; }
+  button {
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button.primary { background: #1d4b7a; border-color: #2b6ca8; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  dl.meta { margin: 12px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 12px; }
+  dl.meta dt { color: var(--muted); }
+  dl.meta dd { margin: 0; word-break: break-all; font-family: ui-monospace, Consolas, monospace; }
+  pre {
+    margin: 8px 0 0;
+    padding: 8px;
+    max-height: 180px;
+    overflow: auto;
+    background: #0d1219;
+    border-radius: 8px;
+    color: #b7c3d3;
+    font: 11px/1.45 ui-monospace, Consolas, monospace;
+    white-space: pre-wrap;
+  }
+  .transport {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    flex: none;
+  }
+  .transport button { flex: none; width: 72px; padding: 5px 8px; }
+  .transport input[type="range"] { flex: 1; accent-color: var(--accent); }
+  .readout { font: 12px/1.4 ui-monospace, Consolas, monospace; color: var(--muted); white-space: nowrap; }
+  @media (max-width: 980px) {
+    main { grid-template-columns: 1fr; overflow: auto; }
+    .view { min-height: 360px; }
+    header .hint { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>脚步锁定对比</h1>
+  <span class="hint">地面固定在 Y=0，左右同时播放处理前和处理后</span>
+  <nav class="mode-nav" aria-label="测试台模式">
+    <a href="/dev/bvh">单文件处理</a>
+    <a class="active" href="/dev/bvh/foot-lock" aria-current="page">脚步锁定</a>
+    <a href="/dev/bvh/merge">多段合并</a>
+  </nav>
+  <span class="spacer"></span>
+  <span class="pill" id="statusPill">未开始</span>
+</header>
+
+<main>
+  <section class="panel controls">
+    <label class="drop" id="drop">
+      <input type="file" id="fileInput" accept=".bvh">
+      <span id="dropText">点击选择或拖拽 .bvh 文件到此处</span>
+    </label>
+    <fieldset>
+      <legend>handleOptions</legend>
+      <label><input type="checkbox" id="footLock" checked> 3 脚步锁定</label>
+    </fieldset>
+    <p class="note">勾选后提交 <code>handleOptions: [3]</code>。接触帧按 SOMA 的速度/jerk 检测，只修正根节点高度。</p>
+    <p class="legend"><span><i class="swatch" style="background:#3ddc97"></i>接近地面</span><span><i class="swatch" style="background:#ff6b6b"></i>悬空</span><span><i class="swatch" style="background:#ffb454"></i>离地高度</span></p>
+    <div class="row">
+      <button class="primary" id="runBtn" disabled>上传并锁定脚步</button>
+    </div>
+    <div class="row">
+      <button id="downloadBtn" disabled>下载处理结果</button>
+      <button id="clearBtn">清空结果</button>
+    </div>
+    <a id="downloadAnchor" hidden></a>
+    <dl class="meta" id="meta"></dl>
+    <pre id="log"></pre>
+  </section>
+  <section class="panel view">
+    <h2>处理前 <span id="sourceInfo">未加载</span></h2>
+    <div class="canvas-wrap"><canvas id="canvasSource"></canvas></div>
+  </section>
+  <section class="panel view">
+    <h2>处理后 <span id="resultInfo">未处理</span></h2>
+    <div class="canvas-wrap"><canvas id="canvasResult"></canvas></div>
+  </section>
+</main>
+
+<div class="transport">
+  <button id="playBtn">暂停</button>
+  <input type="range" id="timeline" min="0" max="0" step="1" value="0" disabled aria-label="播放进度">
+  <span class="readout" id="readout">帧 0/0</span>
+  <label class="readout"><input type="checkbox" id="syncCam" checked> 同步视角</label>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "/dev/bvh/static/three.module.min.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { BVHLoader } from '/dev/bvh/static/BVHLoader.js';
+import { OrbitControls } from '/dev/bvh/static/OrbitControls.js';
+
+const FOOT_KEYS = new Set([
+  'leftfoot', 'leftankle', 'lefttoebase', 'lefttoe',
+  'rightfoot', 'rightankle', 'righttoebase', 'righttoe',
+]);
+const loader = new BVHLoader();
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function setStatus(text, kind) {
+  const pill = $('statusPill');
+  pill.textContent = text;
+  pill.className = 'pill' + (kind ? ' ' + kind : '');
+}
+
+function logLine(text) {
+  $('log').textContent += text + '\n';
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+function setMeta(rows) {
+  const meta = $('meta');
+  meta.replaceChildren();
+  for (const [key, value] of rows) {
+    const dt = document.createElement('dt');
+    dt.textContent = key;
+    const dd = document.createElement('dd');
+    dd.textContent = value;
+    meta.append(dt, dd);
+  }
+}
+
+function formatHeight(value) {
+  return Number.isFinite(value) ? value.toFixed(2) : '—';
+}
+
+function createViewer(canvas, boneColor) {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0f1319);
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100000);
+  camera.position.set(120, 90, 180);
+  const controls = new OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.7);
+  sun.position.set(40, 120, 60);
+  scene.add(sun);
+
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshStandardMaterial({ color: 0x242b36, roughness: 1, side: THREE.DoubleSide }),
+  );
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+  let grid = null;
+  let root = null;
+  let helper = null;
+  let mixer = null;
+  let clipDuration = 0;
+  let clipFrames = 1;
+  let footBones = [];
+  let markers = [];
+  let footLines = null;
+  let contactBand = 1;
+  let clipLowest = Number.POSITIVE_INFINITY;
+  const point = new THREE.Vector3();
+  const view = {
+    position: new THREE.Vector3(),
+    quaternion: new THREE.Quaternion(),
+    up: new THREE.Vector3(),
+    target: new THREE.Vector3(),
+  };
+
+  function disposeObject(object) {
+    if (!object) return;
+    object.traverse((node) => {
+      if (node.geometry) node.geometry.dispose();
+      const materials = Array.isArray(node.material) ? node.material : [node.material];
+      for (const material of materials) {
+        if (material) material.dispose();
+      }
+    });
+  }
+
+  function clearClip() {
+    for (const object of [root, helper, markers.length ? markers[0].parent : null, footLines]) {
+      if (!object) continue;
+      scene.remove(object);
+      disposeObject(object);
+    }
+    root = helper = mixer = footLines = null;
+    footBones = [];
+    markers = [];
+    clipDuration = 0;
+    clipFrames = 1;
+    clipLowest = Number.POSITIVE_INFINITY;
+  }
+
+  function collectFeet(object) {
+    const found = [];
+    object.traverse((node) => {
+      if (!node.isBone) return;
+      const key = node.name.split(':').pop().replace(/[\s_]/g, '').toLowerCase();
+      if (!FOOT_KEYS.has(key)) return;
+      found.push(node);
+      for (const child of node.children) {
+        if (child.isBone && /end/i.test(child.name)) found.push(child);
+      }
+    });
+    return found;
+  }
+
+  function placeGround(box) {
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const span = Math.max(size.x, size.y, size.z, 1) * 3;
+    ground.scale.set(span, span, 1);
+    ground.position.set(center.x, 0, center.z);
+    if (grid) {
+      scene.remove(grid);
+      disposeObject(grid);
+    }
+    grid = new THREE.GridHelper(span, 12, 0x556178, 0x313846);
+    grid.position.set(center.x, 0, center.z);
+    scene.add(grid);
+    contactBand = Math.max(size.y * 0.015, 1e-4);
+  }
+
+  function updateFeet() {
+    if (!footBones.length) return Number.POSITIVE_INFINITY;
+    root.updateMatrixWorld(true);
+    const attribute = footLines.geometry.attributes.position;
+    let lowest = Number.POSITIVE_INFINITY;
+    footBones.forEach((bone, index) => {
+      bone.getWorldPosition(point);
+      markers[index].position.copy(point);
+      markers[index].material.color.set(Math.abs(point.y) <= contactBand ? 0x3ddc97 : 0xff6b6b);
+      attribute.setXYZ(index * 2, point.x, 0, point.z);
+      attribute.setXYZ(index * 2 + 1, point.x, point.y, point.z);
+      lowest = Math.min(lowest, point.y);
+    });
+    attribute.needsUpdate = true;
+    return lowest;
+  }
+
+  function load(text) {
+    clearClip();
+    const parsed = loader.parse(text);
+    root = parsed.skeleton.bones[0];
+    helper = new THREE.SkeletonHelper(root);
+    helper.material.color = new THREE.Color(boneColor);
+    scene.add(root, helper);
+    mixer = new THREE.AnimationMixer(root);
+    mixer.clipAction(parsed.clip).play();
+    clipDuration = parsed.clip.duration;
+    clipFrames = parsed.clip.tracks[0]?.times.length ?? 1;
+
+    const box = new THREE.Box3();
+    const samples = Math.min(clipFrames, 48);
+    for (let index = 0; index < samples; index += 1) {
+      const ratio = samples === 1 ? 0 : index / (samples - 1);
+      mixer.setTime(clipDuration * ratio);
+      root.updateMatrixWorld(true);
+      root.traverse((node) => {
+        if (node.isBone) box.expandByPoint(point.setFromMatrixPosition(node.matrixWorld));
+      });
+    }
+    if (box.isEmpty()) box.setFromCenterAndSize(new THREE.Vector3(), new THREE.Vector3(1, 1, 1));
+    box.expandByPoint(new THREE.Vector3(box.getCenter(new THREE.Vector3()).x, 0, box.getCenter(new THREE.Vector3()).z));
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const radius = Math.max(size.x, size.y, size.z, 1e-4) * 0.5;
+    placeGround(box);
+
+    footBones = collectFeet(root);
+    const footGroup = new THREE.Group();
+    const sphere = new THREE.SphereGeometry(radius * 0.035, 12, 8);
+    markers = footBones.map(() => {
+      const marker = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ color: 0xff6b6b }));
+      footGroup.add(marker);
+      return marker;
+    });
+    scene.add(footGroup);
+    const linePositions = new Float32Array(Math.max(footBones.length, 1) * 6);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+    footLines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: 0xffb454 }));
+    scene.add(footLines);
+
+    camera.near = Math.max(radius / 200, 1e-4);
+    camera.far = radius * 400;
+    camera.updateProjectionMatrix();
+    camera.position.set(center.x + radius * 1.8, Math.max(center.y, radius * 0.4), center.z + radius * 1.8);
+    controls.target.copy(center);
+    controls.minDistance = radius * 0.08;
+    controls.maxDistance = radius * 30;
+    controls.update();
+    mixer.setTime(0);
+    clipLowest = measureLowest();
+    return { bones: parsed.skeleton.bones.length, frames: clipFrames, lowest: clipLowest };
+  }
+
+  function measureLowest() {
+    if (!footBones.length) return Number.POSITIVE_INFINITY;
+    let lowest = Number.POSITIVE_INFINITY;
+    const steps = Math.max(clipFrames, 1);
+    for (let index = 0; index < steps; index += 1) {
+      const ratio = steps === 1 ? 0 : index / (steps - 1);
+      mixer.setTime(clipDuration * ratio);
+      lowest = Math.min(lowest, updateFeet());
+    }
+    mixer.setTime(0);
+    updateFeet();
+    return lowest;
+  }
+
+  function setProgress(progress) {
+    if (!mixer) return Number.POSITIVE_INFINITY;
+    const duration = clipDuration > 0 ? clipDuration : 0;
+    mixer.setTime(Math.min(Math.max(progress, 0), 1) * duration);
+    return updateFeet();
+  }
+
+  function resize() {
+    const width = canvas.clientWidth || 1;
+    const height = canvas.clientHeight || 1;
+    if (canvas.width === Math.floor(width * renderer.getPixelRatio()) &&
+        canvas.height === Math.floor(height * renderer.getPixelRatio())) return;
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  }
+
+  function render() {
+    resize();
+    renderer.render(scene, camera);
+  }
+
+  canvas.addEventListener('pointerdown', () => {
+    if (root) activeViewer = api;
+  });
+
+  const api = {
+    load,
+    clear: clearClip,
+    setProgress,
+    render,
+    updateControls() { controls.update(); },
+    readView() {
+      return {
+        position: view.position.copy(camera.position),
+        quaternion: view.quaternion.copy(camera.quaternion),
+        up: view.up.copy(camera.up),
+        target: view.target.copy(controls.target),
+      };
+    },
+    applyView(other) {
+      camera.position.copy(other.position);
+      camera.quaternion.copy(other.quaternion);
+      camera.up.copy(other.up);
+      controls.target.copy(other.target);
+    },
+    get duration() { return clipDuration; },
+    get frameCount() { return root ? clipFrames : 0; },
+    get hasClip() { return root !== null; },
+    get lowest() { return clipLowest; },
+  };
+  return api;
+}
+
+const sourceViewer = createViewer($('canvasSource'), 0x8fb4d6);
+const resultViewer = createViewer($('canvasResult'), 0x3ddc97);
+let activeViewer = sourceViewer;
+let selectedFile = null;
+let resultUrl = '';
+let resultFilename = '';
+let busy = false;
+let playing = true;
+let progress = 0;
+let scrubbing = false;
+
+function refreshButtons() {
+  $('runBtn').disabled = busy || !selectedFile || !$('footLock').checked;
+  $('downloadBtn').disabled = !resultUrl;
+}
+
+function syncTimeline() {
+  const steps = Math.max(sourceViewer.frameCount, resultViewer.frameCount, 1);
+  $('timeline').max = String(Math.max(steps - 1, 0));
+  $('timeline').disabled = steps <= 1;
+  $('timeline').value = String(steps > 1 ? Math.round(progress * (steps - 1)) : 0);
+}
+
+function updateReadout() {
+  const steps = Math.max(sourceViewer.frameCount, resultViewer.frameCount, 1);
+  const frame = steps > 1 ? Math.round(progress * (steps - 1)) : 0;
+  const sourceNow = sourceViewer.hasClip ? sourceViewer.setProgress(progress) : Number.POSITIVE_INFINITY;
+  const resultNow = resultViewer.hasClip ? resultViewer.setProgress(progress) : Number.POSITIVE_INFINITY;
+  $('readout').textContent =
+    `帧 ${frame}/${Math.max(steps - 1, 0)}  前 ${formatHeight(sourceNow)}  后 ${formatHeight(resultNow)}`;
+}
+
+function rememberFile(file) {
+  if (!file) return;
+  selectedFile = file;
+  $('dropText').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const info = sourceViewer.load(String(reader.result));
+    $('sourceInfo').textContent =
+      `${info.frames} 帧 · 最低脚 ${formatHeight(info.lowest)}`;
+    resultViewer.clear();
+    $('resultInfo').textContent = '未处理';
+    resultUrl = '';
+    progress = 0;
+    syncTimeline();
+    refreshButtons();
+    setStatus('已加载原始 BVH', '');
+    logLine(`本地预览：${file.name}`);
+  };
+  reader.readAsText(file);
+}
+
+$('fileInput').addEventListener('change', () => rememberFile($('fileInput').files[0]));
+const drop = $('drop');
+drop.addEventListener('dragover', (event) => { event.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', (event) => {
+  event.preventDefault();
+  drop.classList.remove('over');
+  rememberFile(event.dataTransfer.files[0]);
+});
+$('footLock').addEventListener('change', refreshButtons);
+
+async function errorText(response) {
+  const text = await response.text();
+  try {
+    const body = JSON.parse(text);
+    return body.message || body.detail || text;
+  } catch {
+    return text || response.statusText;
+  }
+}
+
+async function run() {
+  if (!selectedFile || !$('footLock').checked) return;
+  busy = true;
+  refreshButtons();
+  setStatus('上传中…', 'busy');
+  const form = new FormData();
+  form.append('file', selectedFile, selectedFile.name);
+  const uploadResponse = await fetch('/api/v1/dev/bvh/uploads', { method: 'POST', body: form });
+  if (!uploadResponse.ok) throw new Error(`上传失败：${await errorText(uploadResponse)}`);
+  const upload = await uploadResponse.json();
+  const devTaskId = crypto.randomUUID ? crypto.randomUUID() : `devtask-${Date.now()}`;
+  const payload = {
+    actionId: `dev-foot-lock-${Date.now()}`,
+    originalFileUrl: window.location.origin + upload.sourcePath,
+    originalFileSha256: upload.sha256,
+    handleOptions: [3],
+    callbackUrl: `${window.location.origin}/api/v1/dev/bvh/callback/${devTaskId}`,
+  };
+  setStatus('处理中…', 'busy');
+  logLine('POST /api/v1/bvh/process  handleOptions=[3]');
+  const processResponse = await fetch('/api/v1/bvh/process', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!processResponse.ok) throw new Error(`接口返回错误：${await errorText(processResponse)}`);
+  const accepted = await processResponse.json();
+  setMeta([
+    ['文件', selectedFile.name],
+    ['taskId', accepted.taskId],
+    ['handleOptions', '3'],
+  ]);
+  const task = await pollTask(devTaskId);
+  if (task.status !== 'succeeded') throw new Error(task.message || '处理未成功');
+  const resultResponse = await fetch(task.result.url, { cache: 'no-store' });
+  if (!resultResponse.ok) throw new Error(`下载结果失败：${await errorText(resultResponse)}`);
+  const resultText = await resultResponse.text();
+  const info = resultViewer.load(resultText);
+  resultUrl = task.result.url;
+  resultFilename = task.result.filename;
+  $('resultInfo').textContent = `${info.frames} 帧 · 最低脚 ${formatHeight(info.lowest)}`;
+  syncTimeline();
+  setStatus('处理成功', 'ok');
+  logLine(`完成：${task.result.filename}，处理后最低脚 ${formatHeight(info.lowest)}`);
+}
+
+async function pollTask(taskId) {
+  const deadline = Date.now() + 180000;
+  while (Date.now() < deadline) {
+    const response = await fetch(`/api/v1/dev/bvh/tasks/${taskId}`, { cache: 'no-store' });
+    if (response.ok) {
+      const task = await response.json();
+      if (task.progress?.length) {
+        const latest = task.progress.at(-1);
+        setStatus(`处理中… ${latest.progress}%`, 'busy');
+      }
+      if (task.status === 'succeeded' || task.status === 'failed') return task;
+    }
+    await sleep(400);
+  }
+  throw new Error('等待处理结果超时（180s）');
+}
+
+$('runBtn').addEventListener('click', () => {
+  run().catch((error) => {
+    setStatus('处理失败', 'err');
+    logLine(error.message);
+  }).finally(() => {
+    busy = false;
+    refreshButtons();
+  });
+});
+$('downloadBtn').addEventListener('click', () => {
+  const link = $('downloadAnchor');
+  link.href = resultUrl;
+  link.download = resultFilename || 'processed.bvh';
+  link.click();
+});
+$('clearBtn').addEventListener('click', () => {
+  resultViewer.clear();
+  resultUrl = '';
+  resultFilename = '';
+  $('resultInfo').textContent = '未处理';
+  refreshButtons();
+  setStatus('已清空结果', '');
+});
+$('playBtn').addEventListener('click', () => {
+  playing = !playing;
+  $('playBtn').textContent = playing ? '暂停' : '播放';
+});
+$('timeline').addEventListener('pointerdown', () => { scrubbing = true; });
+$('timeline').addEventListener('pointerup', () => { scrubbing = false; });
+$('timeline').addEventListener('input', () => {
+  const steps = Math.max(Number($('timeline').max), 1);
+  progress = steps > 0 ? Number($('timeline').value) / steps : 0;
+  updateReadout();
+});
+
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+  const reference = Math.max(sourceViewer.duration, resultViewer.duration);
+  if (playing && reference > 0 && !scrubbing) progress = (progress + delta / reference) % 1;
+  updateReadout();
+  if (!scrubbing) {
+    const steps = Math.max(sourceViewer.frameCount, resultViewer.frameCount, 1);
+    $('timeline').value = String(steps > 1 ? Math.round(progress * (steps - 1)) : 0);
+  }
+  if ($('syncCam').checked && activeViewer.hasClip) {
+    const follower = activeViewer === sourceViewer ? resultViewer : sourceViewer;
+    activeViewer.updateControls();
+    follower.updateControls();
+    follower.applyView(activeViewer.readView());
+  } else {
+    sourceViewer.updateControls();
+    resultViewer.updateControls();
+  }
+  sourceViewer.render();
+  resultViewer.render();
+}
+animate();
+refreshButtons();
+logLine('选择 BVH 后先看处理前。勾选脚步锁定再提交，右侧显示贴地结果。');
+</script>
+</body>
+</html>

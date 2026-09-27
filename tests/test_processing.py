@@ -180,12 +180,153 @@ def test_process_bvh_runs_selected_processors_in_order() -> None:
     result.content.close()
 
 
-def test_unimplemented_processors_keep_original_stream() -> None:
+def test_optimize_bvh_loop_keeps_original_stream() -> None:
     source = _downloaded([[0, 0]])
 
-    assert lock_bvh_feet(source) is source
     assert optimize_bvh_loop(source) is source
-    assert process_bvh(source, [3, 4]) is source
+    assert process_bvh(source, [4]) is source
+
+
+def _feet_bvh(
+    root_positions: list[tuple[float, float, float]],
+    *,
+    end_offset: tuple[float, float, float] | None = None,
+) -> DownloadedBvh:
+    """零旋转双腿骨架。脚趾关节相对髋部的 Y 偏移是 -80。"""
+
+    def leg(name: str, x_offset: float) -> str:
+        end_site = ""
+        if end_offset is not None:
+            end_site = (
+                "\n          End Site\n          {\n"
+                f"            OFFSET {end_offset[0]} {end_offset[1]} {end_offset[2]}\n"
+                "          }"
+            )
+        channels = "Zrotation Xrotation Yrotation"
+        toe = "LeftToe" if name == "Left" else "RightToe"
+        return f"""  JOINT {name}UpLeg
+  {{
+    OFFSET {x_offset} 0 0
+    CHANNELS 3 {channels}
+    JOINT {name}Leg
+    {{
+      OFFSET 0 -40 0
+      CHANNELS 3 {channels}
+      JOINT {name}Foot
+      {{
+        OFFSET 0 -35 0
+        CHANNELS 3 {channels}
+        JOINT {toe}
+        {{
+          OFFSET 0 -5 8
+          CHANNELS 3 {channels}{end_site}
+        }}
+      }}
+    }}
+  }}"""
+
+    zeros = " ".join(["0"] * 24)
+    motion = "\n".join(f"{x} {y} {z} 0 0 0 {zeros}" for x, y, z in root_positions)
+    content = f"""HIERARCHY
+ROOT Hips
+{{
+  OFFSET 0 0 0
+  CHANNELS 6 Xposition Yposition Zposition Zrotation Xrotation Yrotation
+{leg("Left", 10)}
+{leg("Right", -10)}
+}}
+MOTION
+Frames: {len(root_positions)}
+Frame Time: 0.0333333
+{motion}
+""".encode()
+    return DownloadedBvh(BytesIO(content), "feet.bvh", len(content))
+
+
+def test_lock_bvh_feet_rejects_skeleton_without_feet() -> None:
+    with pytest.raises(BvhServiceError) as error:
+        lock_bvh_feet(_downloaded([[0, 0]]))
+
+    assert error.value.code == "invalid_bvh"
+
+
+def test_lock_bvh_feet_grounds_still_pose_on_toe_end() -> None:
+    """完全静止时检测器没有 jerk，仍应把更低的脚趾末端落到 Y=0。"""
+    source = _feet_bvh([(0.0, 100.0, 0.0)] * 8, end_offset=(0.0, -4.0, 0.0))
+
+    result = lock_bvh_feet(source)
+
+    # 脚趾 -80，末端再低 4；髋高 100 时最低点是 16，修正后髋高 84。
+    assert [frame[1] for frame in _frames(result)] == pytest.approx([84.0] * 8)
+    result.content.close()
+
+
+def test_lock_bvh_feet_keeps_pose_that_is_already_grounded() -> None:
+    source = _feet_bvh([(0.0, 84.0, 0.0)] * 8, end_offset=(0.0, -4.0, 0.0))
+
+    assert lock_bvh_feet(source) is source
+
+
+def test_lock_bvh_feet_does_not_double_repeated_nokov_offsets() -> None:
+    frames = "\n".join(["0 100 0 0 0 0 0 -40 0 0 0 0 0 -40 0 0 0 0"] * 6)
+    content = f"""HIERARCHY
+ROOT Hips
+{{
+  OFFSET 0 0 0
+  CHANNELS 6 Xposition Yposition Zposition Zrotation Xrotation Yrotation
+  JOINT LeftFoot
+  {{
+    OFFSET 0 -40 0
+    CHANNELS 6 Xposition Yposition Zposition Zrotation Xrotation Yrotation
+  }}
+  JOINT RightFoot
+  {{
+    OFFSET 0 -40 0
+    CHANNELS 6 Xposition Yposition Zposition Zrotation Xrotation Yrotation
+  }}
+}}
+MOTION
+Frames: 6
+Frame Time: 0.0333333
+{frames}
+""".encode()
+    source = DownloadedBvh(BytesIO(content), "nokov.bvh", len(content))
+
+    result = lock_bvh_feet(source)
+
+    # 位置通道重复了 OFFSET。若再加一次，脚会落到 -80，髋会被修成 80 而不是 40。
+    assert [frame[1] for frame in _frames(result)] == pytest.approx([40.0] * 6)
+    result.content.close()
+
+
+def test_lock_bvh_feet_grounds_each_plant_without_pinning_the_jump() -> None:
+    positions: list[tuple[float, float, float]] = []
+    x = 0.0
+    for _ in range(12):
+        positions.append((x, 100.0, 0.0))
+        x += 8.0
+    for _ in range(36):
+        positions.append((x, 100.0, 0.0))
+    for step in range(10):
+        if step < 5:
+            y = 100.0 + (step + 1) * 12.0
+        else:
+            y = 160.0 - (step - 4) * 12.0
+        x += 8.0
+        positions.append((x, y, 0.0))
+    for _ in range(36):
+        positions.append((x, 90.0, 0.0))
+    source = _feet_bvh(positions)
+
+    result = lock_bvh_feet(source)
+
+    ys = [frame[1] for frame in _frames(result)]
+    # 第一段支撑原本脚高 20，第二段原本脚高 10；两段接触帧都应落到 0，所以髋高都是 80。
+    assert ys[24:40] == pytest.approx([80.0] * 16, abs=0.05)
+    assert ys[70:90] == pytest.approx([80.0] * 20, abs=0.05)
+    # 跳跃峰值原本髋高 160。整段最低点平移会把它一起拉低，接触修正必须留在空中。
+    assert ys[52] > 140.0
+    result.content.close()
 
 
 def test_process_bvh_rejects_unknown_option() -> None:

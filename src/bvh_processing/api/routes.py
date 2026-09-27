@@ -65,7 +65,7 @@ async def health() -> HealthResponse:
 # 后台流程：
 #   download_bvh() → SHA-256 校验 → process_bvh() → send_progress_callback()
 #   → send_callback(file=处理结果)
-#   当前 process_bvh() 是算法接入点，联调阶段原样返回 BVH 内容；
+#   handleOptions 含 3 时，用 SOMA 速度/jerk 接触检测修正根节点高度，把支撑脚落到 Y=0；
 #   进度回调按 handleOptions 逐项发送，最终结果只发送一次。
 #
 # 返回：ProcessBvhResponse（立即返回）
