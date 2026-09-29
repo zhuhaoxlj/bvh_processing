@@ -1,4 +1,6 @@
+import re
 from io import BytesIO
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -6,6 +8,12 @@ from scipy.spatial.transform import Rotation
 
 from bvh_processing.errors import BvhServiceError
 from bvh_processing.services.download import DownloadedBvh
+from bvh_processing.services.foot_lock import (
+    _foot_sides,
+    _parse_hierarchy,
+    _side_heights,
+    _world_positions,
+)
 from bvh_processing.services.processing import (
     _STANDARD_POSE_PATH,
     _build_bvh,
@@ -146,16 +154,68 @@ def test_loop_supports_other_euler_channel_order(reference):
     result.content.close()
 
 
-@pytest.mark.parametrize(
-    ("before", "after"),
-    [(b"8.43016", b"9.43016"), (b"JOINT Spine1", b"JOINT OtherSpine")],
-)
-def test_loop_rejects_different_bone_lengths_and_names(reference, before, after):
-    raw = _STANDARD_POSE_PATH.read_bytes().replace(before, after)
+def test_loop_rejects_different_joint_names():
+    raw = _STANDARD_POSE_PATH.read_bytes().replace(b"JOINT Spine1", b"JOINT OtherSpine")
     source = DownloadedBvh(BytesIO(raw), "incompatible.bvh", len(raw))
     with pytest.raises(BvhServiceError, match="不匹配"):
         optimize_bvh_loop(source)
     source.content.close()
+
+
+def _assert_grounded(hierarchy, values):
+    nodes = _parse_hierarchy(hierarchy)
+    positions = _world_positions(nodes, values[-1:])
+    heights = [
+        float(_side_heights(nodes, positions, foot, toe)[0])
+        for foot, toe in _foot_sides(nodes).values()
+    ]
+    assert min(heights) == pytest.approx(0, abs=1e-6)
+    assert all(height >= -1e-6 for height in heights)
+
+
+def test_loop_accepts_real_soma_offsets_and_grounds_target(reference):
+    raw = (Path(__file__).parent / "fixtures/soma_different_offsets.bvh").read_bytes()
+    source = DownloadedBvh(BytesIO(raw), "soma.bvh", len(raw))
+    parsed = _parse_bvh(source)
+    result = process_bvh(source, [4])
+    output = _parse_bvh(result)
+    values = _values(result)
+    standard = np.asarray(_motion_values(reference, "reference.bvh"))[0]
+
+    assert output.hierarchy == parsed.hierarchy
+    assert output.frames[:2] == parsed.frames
+    assert len(output.frames) == 32
+    assert output.frame_time_text == parsed.frame_time_text
+    assert np.isfinite(values).all()
+    np.testing.assert_allclose(values[-1, [0, 2]], _values(source)[-1, [0, 2]])
+    _assert_same_rotations(parsed.hierarchy, values[-1], standard)
+    _assert_grounded(parsed.hierarchy, values)
+    assert abs(values[-1, 1] - standard[1]) > 1
+    source.content.close()
+    result.content.close()
+
+
+@pytest.mark.parametrize("scale", [0.01, 1.2])
+def test_loop_adapts_target_height_to_skeleton_scale(reference, scale):
+    text = _STANDARD_POSE_PATH.read_text()
+    text = re.sub(
+        r"OFFSET\s+([^\n]+)",
+        lambda match: (
+            "OFFSET "
+            + " ".join(str(float(value) * scale) for value in match.group(1).split())
+        ),
+        text,
+    )
+    raw = text.encode()
+    source = DownloadedBvh(BytesIO(raw), "scaled.bvh", len(raw))
+    result = optimize_bvh_loop(source)
+    values = _values(result)
+    standard = np.asarray(_motion_values(reference, "reference.bvh"))[0]
+    assert values[-1, 1] == pytest.approx(standard[1] * scale, abs=1e-6)
+    _assert_same_rotations(_parse_bvh(source).hierarchy, values[-1], standard)
+    _assert_grounded(_parse_bvh(source).hierarchy, values)
+    source.content.close()
+    result.content.close()
 
 
 def test_loop_rejects_nonfinite_motion(reference):
@@ -163,5 +223,14 @@ def test_loop_rejects_nonfinite_motion(reference):
     standard[3] = float("nan")
     source = _clip(reference, [standard])
     with pytest.raises(BvhServiceError, match="无效数值"):
+        optimize_bvh_loop(source)
+    source.content.close()
+
+
+@pytest.mark.parametrize("value", [b"nan", b"inf"])
+def test_loop_rejects_nonfinite_offsets(value):
+    raw = _STANDARD_POSE_PATH.read_bytes().replace(b"8.43016", value)
+    source = DownloadedBvh(BytesIO(raw), "invalid-offset.bvh", len(raw))
+    with pytest.raises(BvhServiceError, match="OFFSET 包含无效数值"):
         optimize_bvh_loop(source)
     source.content.close()

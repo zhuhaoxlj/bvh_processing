@@ -585,6 +585,7 @@ function createViewer(canvas, boneColor, jointColor, onInteract) {
   let helper = null;
   let jointGroup = null;
   let mixer = null;
+  let action = null;
   let clipDuration = 0;
   let clipFrames = 0;
   let bones = [];
@@ -616,7 +617,7 @@ function createViewer(canvas, boneColor, jointColor, onInteract) {
       scene.remove(object);
       disposeTree(object);
     }
-    root = helper = grid = jointGroup = axisGroup = mixer = null;
+    root = helper = grid = jointGroup = axisGroup = mixer = action = null;
     clipDuration = 0;
     clipFrames = 0;
     bones = [];
@@ -651,14 +652,28 @@ function createViewer(canvas, boneColor, jointColor, onInteract) {
     return found;
   }
 
+  /**
+   * 把动作定位到绝对时间。动作统一用 LoopOnce + clampWhenFinished：
+   * 默认的 LoopRepeat 在 time 恰好等于 clip.duration 时会回卷到第 0 帧，
+   * 表现为拖到/播到最后一帧时骨架“瞬移”回起始姿态；命中末尾后动作会停在
+   * 结束状态，所以每次定位前先 reset 才能继续往回拖。
+   */
+  function seek(targetAction, targetMixer, seconds) {
+    targetAction.reset();
+    targetMixer.setTime(seconds);
+  }
+
   function measure(boundingRoot, clip, boundingBones) {
     const probe = new THREE.AnimationMixer(boundingRoot);
-    probe.clipAction(clip).play();
+    const probeAction = probe.clipAction(clip);
+    probeAction.setLoop(THREE.LoopOnce, 1);
+    probeAction.clampWhenFinished = true;
+    probeAction.play();
     const box = new THREE.Box3();
     const point = new THREE.Vector3();
     const samples = 24;
     for (let index = 0; index <= samples; index += 1) {
-      probe.setTime(clip.duration * (index / samples));
+      seek(probeAction, probe, clip.duration * (index / samples));
       boundingRoot.updateMatrixWorld(true);
       for (const bone of boundingBones) {
         box.expandByPoint(point.setFromMatrixPosition(bone.matrixWorld));
@@ -684,7 +699,10 @@ function createViewer(canvas, boneColor, jointColor, onInteract) {
     scene.add(root, helper);
 
     mixer = new THREE.AnimationMixer(root);
-    mixer.clipAction(parsed.clip).play();
+    action = mixer.clipAction(parsed.clip);
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    action.play();
     clipDuration = parsed.clip.duration;
     // 关键帧数即 BVH 帧数，用来把进度条切成"一帧一格"。
     clipFrames = parsed.clip.tracks[0]?.times.length ?? 1;
@@ -756,8 +774,8 @@ function createViewer(canvas, boneColor, jointColor, onInteract) {
 
   /** 用归一化进度（0~1）定位动画，两个窗口因此永远在同一相对位置。 */
   function setProgress(progress) {
-    if (!mixer || clipDuration <= 0) return;
-    mixer.setTime(Math.min(Math.max(progress, 0), 1) * clipDuration);
+    if (!mixer || !action || clipDuration <= 0) return;
+    seek(action, mixer, Math.min(Math.max(progress, 0), 1) * clipDuration);
   }
 
   function updateControls() {

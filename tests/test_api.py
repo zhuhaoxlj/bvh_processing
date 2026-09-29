@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID
 
@@ -210,8 +211,17 @@ def test_process_accepts_task_and_callbacks_with_file() -> None:
     assert all(body["originalFileUrl"] == SOURCE_URL for body in progress_bodies)
 
 
-def test_process_option_four_callbacks_with_standard_pose_transition() -> None:
-    content = _STANDARD_POSE_PATH.read_bytes()
+@pytest.mark.parametrize(
+    ("source_path", "frame_count"),
+    [
+        (_STANDARD_POSE_PATH, 121),
+        (Path(__file__).parent / "fixtures/soma_different_offsets.bvh", 32),
+    ],
+)
+def test_process_option_four_callbacks_with_standard_pose_transition(
+    source_path: Path, frame_count: int
+) -> None:
+    content = source_path.read_bytes()
     payload = {
         **_request_body(),
         "handleOptions": [4],
@@ -230,7 +240,7 @@ def test_process_option_four_callbacks_with_standard_pose_transition() -> None:
     assert len(callback.calls) == 1
     callback_body = callback.calls.last.request.content
     assert b'name="file"' in callback_body
-    assert b"Frames: 121\n" in callback_body
+    assert f"Frames: {frame_count}\n".encode() in callback_body
     assert len(progress_callback.calls) == 1
     progress = json.loads(progress_callback.calls.last.request.content)
     assert progress["stepCode"] == "LOOP_OPTIMIZE"

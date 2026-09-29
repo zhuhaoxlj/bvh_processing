@@ -284,6 +284,7 @@ function createViewer(canvas, boneColor) {
   let root = null;
   let helper = null;
   let mixer = null;
+  let action = null;
   let clipDuration = 0;
   let clipFrames = 1;
   let footBones = [];
@@ -316,12 +317,23 @@ function createViewer(canvas, boneColor) {
       scene.remove(object);
       disposeObject(object);
     }
-    root = helper = mixer = footLines = null;
+    root = helper = mixer = action = footLines = null;
     footBones = [];
     markers = [];
     clipDuration = 0;
     clipFrames = 1;
     clipLowest = Number.POSITIVE_INFINITY;
+  }
+
+  /**
+   * 把动作定位到绝对时间。动作统一用 LoopOnce + clampWhenFinished：
+   * 默认的 LoopRepeat 在 time 恰好等于 clip.duration 时会回卷到第 0 帧，
+   * 表现为拖到/播到最后一帧时骨架“瞬移”回起始姿态；命中末尾后动作会停在
+   * 结束状态，所以每次定位前先 reset 才能继续往回拖。
+   */
+  function seek(targetAction, targetMixer, seconds) {
+    targetAction.reset();
+    targetMixer.setTime(seconds);
   }
 
   function collectFeet(object) {
@@ -379,7 +391,10 @@ function createViewer(canvas, boneColor) {
     helper.material.color = new THREE.Color(boneColor);
     scene.add(root, helper);
     mixer = new THREE.AnimationMixer(root);
-    mixer.clipAction(parsed.clip).play();
+    action = mixer.clipAction(parsed.clip);
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    action.play();
     clipDuration = parsed.clip.duration;
     clipFrames = parsed.clip.tracks[0]?.times.length ?? 1;
 
@@ -387,7 +402,7 @@ function createViewer(canvas, boneColor) {
     const samples = Math.min(clipFrames, 48);
     for (let index = 0; index < samples; index += 1) {
       const ratio = samples === 1 ? 0 : index / (samples - 1);
-      mixer.setTime(clipDuration * ratio);
+      seek(action, mixer, clipDuration * ratio);
       root.updateMatrixWorld(true);
       root.traverse((node) => {
         if (node.isBone) box.expandByPoint(point.setFromMatrixPosition(node.matrixWorld));
@@ -423,7 +438,7 @@ function createViewer(canvas, boneColor) {
     controls.minDistance = radius * 0.08;
     controls.maxDistance = radius * 30;
     controls.update();
-    mixer.setTime(0);
+    seek(action, mixer, 0);
     clipLowest = measureLowest();
     return { bones: parsed.skeleton.bones.length, frames: clipFrames, lowest: clipLowest };
   }
@@ -434,18 +449,18 @@ function createViewer(canvas, boneColor) {
     const steps = Math.max(clipFrames, 1);
     for (let index = 0; index < steps; index += 1) {
       const ratio = steps === 1 ? 0 : index / (steps - 1);
-      mixer.setTime(clipDuration * ratio);
+      seek(action, mixer, clipDuration * ratio);
       lowest = Math.min(lowest, updateFeet());
     }
-    mixer.setTime(0);
+    seek(action, mixer, 0);
     updateFeet();
     return lowest;
   }
 
   function setProgress(progress) {
-    if (!mixer) return Number.POSITIVE_INFINITY;
+    if (!mixer || !action) return Number.POSITIVE_INFINITY;
     const duration = clipDuration > 0 ? clipDuration : 0;
-    mixer.setTime(Math.min(Math.max(progress, 0), 1) * duration);
+    seek(action, mixer, Math.min(Math.max(progress, 0), 1) * duration);
     return updateFeet();
   }
 

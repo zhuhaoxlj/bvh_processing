@@ -442,13 +442,12 @@ def _standard_pose_target(parsed: _ParsedBvh) -> np.ndarray:
             or joint.parent != reference_joint.parent
             or len(joint.channels) != len(reference_joint.channels)
             or set(joint.channels) != set(reference_joint.channels)
-            or not np.allclose(
-                joint.offset, reference_joint.offset, rtol=1e-5, atol=1e-4
-            )
         ):
             raise _invalid_bvh(
-                f"关节 {joint.name} 与标准姿态骨架不匹配，需使用相同骨架、骨长和通道"
+                f"关节 {joint.name} 与标准姿态骨架不匹配，需使用相同关节顺序、层级和通道"
             )
+        if not np.isfinite(joint.offset).all():
+            raise _invalid_bvh(f"关节 {joint.name} 的 OFFSET 包含无效数值")
         for index, channel in enumerate(joint.channels):
             target[cursor + index] = reference_values[
                 reference_cursor + reference_joint.channels.index(channel)
@@ -479,7 +478,13 @@ def _standard_pose_target(parsed: _ParsedBvh) -> np.ndarray:
             ).as_euler(order, degrees=True)
         cursor += len(joint.channels)
         reference_cursor += len(reference_joint.channels)
-    return target
+    try:
+        grounded = lock_feet_to_ground(
+            parsed.hierarchy, target[None, :], parsed.frame_time
+        )
+    except FootLockError as error:
+        raise _invalid_bvh(f"标准姿态贴地失败：{error}") from error
+    return target if grounded is None else grounded[0]
 
 
 def _parse_joints(hierarchy: str) -> list[_Joint]:

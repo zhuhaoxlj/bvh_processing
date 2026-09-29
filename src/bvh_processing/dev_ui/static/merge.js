@@ -52,10 +52,22 @@ function createViewer(canvas, color) {
   let grid = null;
   let axes = null;
   let mixer = null;
+  let action = null;
   let duration = 0;
   let frames = 0;
   const homePosition = new THREE.Vector3(2, 1, 2);
   const homeTarget = new THREE.Vector3();
+
+  /**
+   * 把动作定位到绝对时间。动作统一用 LoopOnce + clampWhenFinished：
+   * 默认的 LoopRepeat 在 time 恰好等于 clip.duration 时会回卷到第 0 帧，
+   * 表现为拖到/播到最后一帧时骨架“瞬移”回起始姿态；命中末尾后动作会停在
+   * 结束状态，所以每次定位前先 reset 才能继续往回拖。
+   */
+  function seek(targetAction, targetMixer, seconds) {
+    targetAction.reset();
+    targetMixer.setTime(seconds);
+  }
 
   function dispose(object) {
     if (!object) return;
@@ -72,7 +84,7 @@ function createViewer(canvas, color) {
       if (object) scene.remove(object);
       dispose(object);
     }
-    root = helper = grid = axes = mixer = null;
+    root = helper = grid = axes = mixer = action = null;
     duration = 0;
     frames = 0;
   }
@@ -86,7 +98,10 @@ function createViewer(canvas, color) {
     helper.material.color.setHex(color);
     scene.add(root, helper);
     mixer = new THREE.AnimationMixer(root);
-    mixer.clipAction(parsed.clip).play();
+    action = mixer.clipAction(parsed.clip);
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    action.play();
     duration = parsed.clip.duration;
     frames = parsed.clip.tracks[0]?.times.length || 1;
 
@@ -95,9 +110,12 @@ function createViewer(canvas, color) {
     const box = new THREE.Box3();
     const point = new THREE.Vector3();
     const probe = new THREE.AnimationMixer(root);
-    probe.clipAction(parsed.clip).play();
+    const probeAction = probe.clipAction(parsed.clip);
+    probeAction.setLoop(THREE.LoopOnce, 1);
+    probeAction.clampWhenFinished = true;
+    probeAction.play();
     for (let index = 0; index <= 20; index += 1) {
-      probe.setTime(duration * index / 20);
+      seek(probeAction, probe, duration * index / 20);
       root.updateMatrixWorld(true);
       for (const bone of bones) box.expandByPoint(point.setFromMatrixPosition(bone.matrixWorld));
     }
@@ -137,7 +155,7 @@ function createViewer(canvas, color) {
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
     }
-    if (mixer) mixer.setTime(Math.min(Math.max(progress, 0), 1) * duration);
+    if (mixer && action) seek(action, mixer, Math.min(Math.max(progress, 0), 1) * duration);
     controls.update();
     renderer.render(scene, camera);
   }

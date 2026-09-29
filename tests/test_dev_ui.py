@@ -2,9 +2,13 @@
 
 import hashlib
 import logging
+import re
+import shutil
+import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
@@ -122,6 +126,138 @@ def test_dev_ui_page_and_assets_are_served_when_enabled() -> None:
     assert 'id="syncCam"' in page.text
     assert three.status_code == 200
     assert loader.status_code == 200
+
+
+_VIEWER_ROOT = Path(__file__).resolve().parents[1] / "src/bvh_processing/dev_ui"
+_THREE_MODULE = _VIEWER_ROOT / "static/three.module.min.js"
+# 直接用随页面发布的 three r160 验证播放语义：默认 LoopRepeat 在 time 命中
+# clip.duration 时会回卷到第 0 帧，这正是「播放到最后一帧骨架瞬移」的根因；
+# 查看器改用 LoopOnce + clampWhenFinished + 每次定位前 reset，就会停在最后一帧。
+_VIEWER_LAST_FRAME_SCRIPT = r"""
+import * as THREE from '__THREE_URL__';
+
+const LOOP_ONCE = __LOOP_ONCE__;
+const CLAMP_WHEN_FINISHED = __CLAMP_WHEN_FINISHED__;
+
+const frameCount = 949;
+const frameTime = 0.03333323;
+const times = [];
+const values = [];
+for (let i = 0; i < frameCount; i += 1) {
+  times.push(i * frameTime);
+  values.push(i, 0, 0, 0);
+}
+const clip = new THREE.AnimationClip('animation', -1, [
+  new THREE.VectorKeyframeTrack('.position', times, values),
+]);
+const duration = clip.duration;
+const lastIndex = frameCount - 1;
+
+function makeAction() {
+  const root = new THREE.Object3D();
+  const mixer = new THREE.AnimationMixer(root);
+  const action = mixer.clipAction(clip);
+  if (LOOP_ONCE) action.setLoop(THREE.LoopOnce, 1);
+  if (CLAMP_WHEN_FINISHED) action.clampWhenFinished = true;
+  action.play();
+  return { root, mixer, action };
+}
+
+// 页面 index.html 里真正的 seek()：定位前必须 reset，否则命中末尾后动作会
+// 停在结束状态，无法再往回拖。
+__SEEK_SOURCE__
+
+// 对照组：three 默认的 LoopRepeat 在 time 命中 clip.duration 时回卷到第 0 帧，
+// 也就是肉眼看到的「最后一帧瞬移」。
+{
+  const root = new THREE.Object3D();
+  const mixer = new THREE.AnimationMixer(root);
+  mixer.clipAction(clip).play();
+  mixer.setTime(duration);
+  if (Math.round(root.position.x) !== 0) {
+    throw new Error('LoopRepeat 应当回卷到第 0 帧（瞬移根因）');
+  }
+}
+
+// 页面配置：拖到最后一帧应停在最后一帧，并且还能继续往回拖。
+{
+  const { root, mixer, action } = makeAction();
+  seek(action, mixer, duration);
+  if (Math.round(root.position.x) !== lastIndex) {
+    throw new Error(`最后一帧应为 ${lastIndex}，实际为 ${root.position.x}`);
+  }
+  seek(action, mixer, duration * 0.5);
+  const middle = root.position.x;
+  if (middle < lastIndex * 0.4 || middle > lastIndex * 0.6) {
+    throw new Error(`回拖应落在中间帧附近，实际为 ${middle}`);
+  }
+  seek(action, mixer, duration);
+  if (Math.round(root.position.x) !== lastIndex) {
+    throw new Error('再次拖到末尾应仍停在最后一帧');
+  }
+}
+console.log('VIEWER_LAST_FRAME_OK');
+"""
+_SEEK_PATTERN = re.compile(
+    r"function seek\(targetAction, targetMixer, seconds\) \{\n(.*?)\n  \}",
+    re.DOTALL,
+)
+
+
+def _seek_source(name: str) -> str:
+    """取出查看器里真正的 seek() 源码，保证回归测试跑的是页面逻辑本身。"""
+    text = (_VIEWER_ROOT / name).read_text(encoding="utf-8")
+    match = _SEEK_PATTERN.search(text)
+    assert match is not None, f"{name} 缺少通过 seek() 统一定位的 helper"
+    return match.group(0)
+
+
+def test_dev_ui_viewers_hold_the_last_frame() -> None:
+    """三个查看器都要停在最后一帧，而不是回卷到第 0 帧。"""
+    for name in ("index.html", "foot_lock.html", "static/merge.js"):
+        text = (_VIEWER_ROOT / name).read_text(encoding="utf-8")
+        actions = text.count("clipAction(")
+        assert actions > 0, name
+        # 每个动作（主骨架 + 量包围盒的 probe）都必须配置成停在末尾。
+        assert text.count("setLoop(THREE.LoopOnce") == actions, name
+        assert text.count("clampWhenFinished = true") == actions, name
+        _seek_source(name)
+        # 一律走 seek()，页面里不能再有绕过它的绝对定位。
+        assert ".setTime(" not in text.replace("targetMixer.setTime(", ""), name
+
+
+def test_dev_ui_viewer_playback_matches_three_loop_semantics(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("需要 node 才能用内置 three 验证播放语义")
+
+    page = (_VIEWER_ROOT / "index.html").read_text(encoding="utf-8")
+    module = tmp_path / "three.mjs"
+    module.write_bytes(_THREE_MODULE.read_bytes())
+    script = tmp_path / "viewer-last-frame.mjs"
+    script.write_text(
+        _VIEWER_LAST_FRAME_SCRIPT.replace("__THREE_URL__", module.as_uri())
+        .replace("__SEEK_SOURCE__", _seek_source("index.html"))
+        .replace(
+            "__LOOP_ONCE__", "true" if "setLoop(THREE.LoopOnce" in page else "false"
+        )
+        .replace(
+            "__CLAMP_WHEN_FINISHED__",
+            "true" if "clampWhenFinished = true" in page else "false",
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [node, str(script)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "VIEWER_LAST_FRAME_OK" in result.stdout
 
 
 def test_dev_ui_is_not_mounted_by_default() -> None:
