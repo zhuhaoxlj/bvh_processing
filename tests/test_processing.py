@@ -180,11 +180,13 @@ def test_process_bvh_runs_selected_processors_in_order() -> None:
     result.content.close()
 
 
-def test_optimize_bvh_loop_keeps_original_stream() -> None:
+def test_optimize_bvh_loop_rejects_incompatible_skeleton() -> None:
     source = _downloaded([[0, 0]])
 
-    assert optimize_bvh_loop(source) is source
-    assert process_bvh(source, [4]) is source
+    with pytest.raises(BvhServiceError, match="标准姿态"):
+        optimize_bvh_loop(source)
+    with pytest.raises(BvhServiceError, match="标准姿态"):
+        process_bvh(source, [4])
 
 
 def _feet_bvh(

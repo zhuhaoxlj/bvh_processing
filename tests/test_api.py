@@ -14,6 +14,7 @@ from httpx import Response
 from bvh_processing.config import Settings, get_settings
 from bvh_processing.main import create_app
 from bvh_processing.retargeting.exporter import RetargetArtifacts
+from bvh_processing.services.processing import _STANDARD_POSE_PATH
 
 SOURCE_URL = "https://minio.example.com/motions/walk.bvh"
 CALLBACK_URL = "https://backend.example.com/callbacks/bvh"
@@ -207,6 +208,33 @@ def test_process_accepts_task_and_callbacks_with_file() -> None:
     ]
     assert all(body["actionId"] == "action-42" for body in progress_bodies)
     assert all(body["originalFileUrl"] == SOURCE_URL for body in progress_bodies)
+
+
+def test_process_option_four_callbacks_with_standard_pose_transition() -> None:
+    content = _STANDARD_POSE_PATH.read_bytes()
+    payload = {
+        **_request_body(),
+        "handleOptions": [4],
+        "originalFileSha256": hashlib.sha256(content).hexdigest(),
+    }
+    with respx.mock:
+        respx.get(SOURCE_URL).mock(return_value=Response(200, content=content))
+        callback = respx.post(CALLBACK_URL).mock(return_value=Response(204))
+        progress_callback = respx.post(PROGRESS_CALLBACK_URL).mock(
+            return_value=Response(204)
+        )
+        with TestClient(create_app()) as client:
+            response = client.post("/api/v1/bvh/process", json=payload)
+
+    assert response.status_code == 200
+    assert len(callback.calls) == 1
+    callback_body = callback.calls.last.request.content
+    assert b'name="file"' in callback_body
+    assert b"Frames: 121\n" in callback_body
+    assert len(progress_callback.calls) == 1
+    progress = json.loads(progress_callback.calls.last.request.content)
+    assert progress["stepCode"] == "LOOP_OPTIMIZE"
+    assert "标准姿态" in progress["message"]
 
 
 HUMANOID_BVH_CONTENT = b"""HIERARCHY

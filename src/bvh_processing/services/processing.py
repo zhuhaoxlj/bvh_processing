@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import SpooledTemporaryFile
 
 import numpy as np
-from scipy.spatial.transform import Rotation
+from scipy.spatial.transform import Rotation, Slerp
 
 from bvh_processing.config import Settings
 from bvh_processing.errors import BvhServiceError
@@ -29,6 +29,10 @@ _REST_POSE_TOLERANCE_DEGREES = 1.0
 # 判定人体朝向用的左右大腿根关节名，按优先级排列。
 _LEFT_HIP_JOINTS = ("LeftUpLeg", "LeftHip", "LeftUpperLeg", "LeftThigh")
 _RIGHT_HIP_JOINTS = ("RightUpLeg", "RightHip", "RightUpperLeg", "RightThigh")
+_STANDARD_POSE_PATH = (
+    Path(__file__).resolve().parents[1] / "resources/standard_pose.bvh"
+)
+_STANDARD_POSE_TRANSITION_SECONDS = 1.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -358,8 +362,124 @@ def lock_bvh_feet(downloaded: DownloadedBvh) -> DownloadedBvh:
 
 
 def optimize_bvh_loop(downloaded: DownloadedBvh) -> DownloadedBvh:
-    """循环优化算法占位；当前保持 BVH 数据不变。"""
-    return downloaded
+    """保留原动作，在末尾追加约一秒过渡，回到固定标准姿态。"""
+    parsed = _parse_bvh(downloaded)
+    values = np.asarray(_motion_values(parsed, downloaded.source_filename))
+    target = _standard_pose_target(parsed)
+    joints = _parse_joints(parsed.hierarchy)
+    last = values[-1]
+    for index, channel in enumerate(joints[0].channels):
+        if channel in {"Xposition", "Zposition"}:
+            target[index] = last[index]
+
+    frame_count = max(2, round(_STANDARD_POSE_TRANSITION_SECONDS / parsed.frame_time))
+    times = np.linspace(0.0, 1.0, frame_count + 1)
+    weights = times**3 * (10.0 - 15.0 * times + 6.0 * times**2)
+    transition = last + weights[:, None] * (target - last)
+    cursor = 0
+    for joint in joints:
+        indexes = [
+            cursor + index
+            for index, channel in enumerate(joint.channels)
+            if channel.endswith("rotation")
+        ]
+        if indexes:
+            order = "".join(
+                channel[0] for channel in joint.channels if channel.endswith("rotation")
+            )
+            endpoints = Rotation.from_euler(
+                order, np.stack([last[indexes], target[indexes]]), degrees=True
+            )
+            angles = Slerp([0.0, 1.0], endpoints)(weights).as_euler(order, degrees=True)
+            transition[:, indexes] = _continuous_euler(angles, last[indexes])
+        cursor += len(joint.channels)
+
+    frames = parsed.frames + [
+        " ".join(_format_motion_value(value) for value in frame)
+        for frame in transition[1:]
+    ]
+    return _build_bvh(
+        parsed, frames, parsed.frame_time_text, downloaded.source_filename
+    )
+
+
+def _continuous_euler(angles: np.ndarray, initial: np.ndarray) -> np.ndarray:
+    """选择距离上一帧最近的等价欧拉角，保留原末帧的分支。"""
+    result = np.empty_like(angles)
+    previous = initial
+    for index, angle in enumerate(angles):
+        alternate = np.array([angle[0] + 180, 180 - angle[1], angle[2] + 180])
+        candidates = np.stack([angle, alternate])
+        candidates += 360 * np.round((previous - candidates) / 360)
+        nearest = np.argmin(np.linalg.norm(candidates - previous, axis=1))
+        result[index] = candidates[nearest]
+        previous = result[index]
+    return result
+
+
+def _standard_pose_target(parsed: _ParsedBvh) -> np.ndarray:
+    with _STANDARD_POSE_PATH.open("rb") as content:
+        reference = _parse_bvh(
+            DownloadedBvh(
+                content, _STANDARD_POSE_PATH.name, _STANDARD_POSE_PATH.stat().st_size
+            )
+        )
+    reference_values = _motion_values(reference, _STANDARD_POSE_PATH.name)[0]
+    joints = _parse_joints(parsed.hierarchy)
+    reference_joints = _parse_joints(reference.hierarchy)
+    if (
+        len(joints) != len(reference_joints)
+        or sum(len(joint.channels) for joint in joints) != parsed.channel_count
+    ):
+        raise _invalid_bvh("循环优化要求与标准姿态相同的骨架和通道数量")
+
+    target = np.empty(parsed.channel_count)
+    cursor = 0
+    reference_cursor = 0
+    for joint, reference_joint in zip(joints, reference_joints, strict=True):
+        if (
+            joint.name != reference_joint.name
+            or joint.parent != reference_joint.parent
+            or len(joint.channels) != len(reference_joint.channels)
+            or set(joint.channels) != set(reference_joint.channels)
+            or not np.allclose(
+                joint.offset, reference_joint.offset, rtol=1e-5, atol=1e-4
+            )
+        ):
+            raise _invalid_bvh(
+                f"关节 {joint.name} 与标准姿态骨架不匹配，需使用相同骨架、骨长和通道"
+            )
+        for index, channel in enumerate(joint.channels):
+            target[cursor + index] = reference_values[
+                reference_cursor + reference_joint.channels.index(channel)
+            ]
+        rotation_indexes = [
+            cursor + index
+            for index, channel in enumerate(joint.channels)
+            if channel.endswith("rotation")
+        ]
+        if rotation_indexes:
+            reference_indexes = [
+                reference_cursor + index
+                for index, channel in enumerate(reference_joint.channels)
+                if channel.endswith("rotation")
+            ]
+            reference_order = "".join(
+                channel[0]
+                for channel in reference_joint.channels
+                if channel.endswith("rotation")
+            )
+            order = "".join(
+                channel[0] for channel in joint.channels if channel.endswith("rotation")
+            )
+            target[rotation_indexes] = Rotation.from_euler(
+                reference_order,
+                np.asarray(reference_values)[reference_indexes],
+                degrees=True,
+            ).as_euler(order, degrees=True)
+        cursor += len(joint.channels)
+        reference_cursor += len(reference_joint.channels)
+    return target
 
 
 def _parse_joints(hierarchy: str) -> list[_Joint]:

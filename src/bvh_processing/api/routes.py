@@ -79,7 +79,9 @@ async def health() -> HealthResponse:
     summary="提交 BVH 处理任务",
     description=(
         "异步接收 BVH 处理任务。服务会下载 originalFileUrl 指向的文件，"
-        "并用 originalFileSha256 校验原始字节。任务执行期间，服务会对每个 "
+        "并用 originalFileSha256 校验原始字节。"
+        "选项 4 将保留原帧并追加约 1 秒过渡到固定标准姿态。"
+        "任务执行期间，服务会对每个 "
         "选中的处理选项向 callbackUrl 发送一次 multipart/form-data 进度回调；"
         "全部完成后，再发送一次携带 file 的最终结果回调。"
     ),

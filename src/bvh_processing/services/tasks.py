@@ -90,7 +90,7 @@ async def run_processing_task(
         1: (2, "DENOISE", "整体去噪"),
         2: (3, "SMOOTH_FRAME", "整体平滑与补帧"),
         3: (4, "FOOT_LOCK", "脚步锁定校正"),
-        4: (5, "LOOP_OPTIMIZE", "循环优化（首尾自然过渡）"),
+        4: (5, "LOOP_OPTIMIZE", "循环优化（末尾平滑回到标准姿态）"),
         5: (6, "FACE_Z", "朝向对齐（面向 Z 轴正方向）"),
     }
 
