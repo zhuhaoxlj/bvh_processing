@@ -477,10 +477,12 @@ def export_transition_bvh(
     _validate_matching_skeletons(template, following)
 
     target = _target_positions(joints, template, source_a_metadata)
-    generated_local = _solve_local_rotations(target, template)
     hml_start, hml_end = transition_range
     bridge_root = target[hml_start:hml_end, 0]
-    bridge_local = generated_local[hml_start:hml_end]
+    # Rotation solving has no dependencies between frames. A/B rotations come
+    # from the original BVHs below; solving them again only discards the result
+    # and makes every seam scale with the entire accumulated motion length.
+    bridge_local = _solve_local_rotations(target[hml_start:hml_end], template)
     if len(bridge_root) < 1:
         raise ValueError("MDM 过渡区间无法转换到源 BVH 帧率")
     bridge_local, twist_driven_joints = _apply_hml_twist_deltas(

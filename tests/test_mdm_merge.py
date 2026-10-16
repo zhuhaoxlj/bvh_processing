@@ -135,6 +135,57 @@ def _clips(content: bytes, count: int) -> list[BvhClip]:
     return [BvhClip(f"motion-{index}.bvh", BytesIO(content)) for index in range(count)]
 
 
+@pytest.mark.parametrize("clip_count,gap", [(2, 0.05), (2, 0.5), (3, 0.5)])
+def test_bridge_only_rotation_solving_matches_full_sequence(
+    clip_count: int,
+    gap: float,
+    source_bvh: bytes,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bvh_processing.vendor.mdm.workbench import bvh_export
+
+    solve = bvh_export._solve_local_rotations
+    target_positions = bvh_export._target_positions
+    targets = []
+    solved_frame_counts = []
+
+    def capture_targets(*args, **kwargs):
+        target = target_positions(*args, **kwargs)
+        targets.append(target)
+        return target
+
+    def solve_bridge(target, template):
+        solved_frame_counts.append(len(target))
+        return solve(target, template)
+
+    def merge():
+        return merge_bvh_clips(
+            _clips(source_bvh, clip_count),
+            [gap] * (clip_count - 1),
+            engine=FakeEngine(),
+            seed=21,
+            scale=0.01,
+            up_axis="Y",
+        )
+
+    monkeypatch.setattr(bvh_export, "_target_positions", capture_targets)
+    monkeypatch.setattr(bvh_export, "_solve_local_rotations", solve_bridge)
+    optimized = merge()
+    assert solved_frame_counts == [round(gap * 20)] * (clip_count - 1)
+    assert all(len(target) > count for target, count in zip(targets, solved_frame_counts))
+
+    def solve_full_then_slice(target, template):
+        # Oracle: reproduce the old solve-all-frames behavior before slicing.
+        full = targets[-1]
+        assert np.shares_memory(target, full)
+        start = (target.ctypes.data - full.ctypes.data) // full.strides[0]
+        return solve(full, template)[start : start + len(target)]
+
+    monkeypatch.setattr(bvh_export, "_solve_local_rotations", solve_full_then_slice)
+    legacy = merge()
+    assert optimized == legacy
+
+
 def test_zero_gap_aligns_without_loading_mdm_assets(
     source_bvh: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
