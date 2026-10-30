@@ -589,6 +589,46 @@ def test_train_uploads_npz_selects_first_available_gpu_and_starts_job() -> None:
     }
 
 
+@pytest.mark.parametrize("policy_type", [1, 2])
+@pytest.mark.parametrize("mock", [True, False])
+def test_train_policy_type_returns_resource_failure_without_side_effects(
+    policy_type: int, mock: bool
+) -> None:
+    app = create_app()
+    app.dependency_overrides[get_settings] = lambda: Settings(_env_file=None, mock=mock)
+    with (
+        respx.mock(assert_all_called=False) as transport,
+        patch("bvh_processing.api.routes.run_mock_train_task") as mock_task,
+        patch("bvh_processing.api.routes.download_npz") as download,
+        patch("bvh_processing.api.routes.submit_training_job") as submit,
+        TestClient(app) as client,
+    ):
+        response = client.post(
+            "/api/v1/bvh/train", json=_train_payload(policyType=policy_type)
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": False,
+        "taskId": None,
+        "message": "暂无可用GPU主机资源",
+    }
+    assert not transport.calls
+    mock_task.assert_not_called()
+    download.assert_not_called()
+    submit.assert_not_called()
+
+
+@pytest.mark.parametrize("policy_type", [0, 3, -1, "1", True, 1.5])
+def test_train_rejects_invalid_policy_type(policy_type: object) -> None:
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/v1/bvh/train", json=_train_payload(policyType=policy_type)
+        )
+    assert response.status_code == 422
+    assert any(error["field"] == "policyType" for error in response.json()["errors"])
+
+
 def test_train_returns_capacity_full_when_no_gpu_is_available() -> None:
     with respx.mock:
         respx.get(TRAIN_NPZ_URL).mock(return_value=Response(200, content=TRAIN_NPZ))

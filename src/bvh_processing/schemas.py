@@ -79,6 +79,14 @@ class RetargetBvhRequest(BaseModel):
 
 
 class TrainBvhRequest(BaseModel):
+    policy_type: int | None = Field(
+        default=None,
+        alias="policyType",
+        strict=True,
+        ge=1,
+        le=2,
+        description="策略类型：1 或 2；当前均返回暂无可用GPU主机资源",
+    )
     action_id: str | None = Field(
         default=None,
         alias="actionId",

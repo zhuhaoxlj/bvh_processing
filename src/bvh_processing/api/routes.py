@@ -222,6 +222,14 @@ async def train(
     background_tasks: BackgroundTasks,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> ProcessBvhResponse:
+    if payload.policy_type in (1, 2):
+        # Todo: 接入策略类型对应的 GPU 主机资源调度。
+        return ProcessBvhResponse(
+            success=False,
+            taskId=None,
+            message="暂无可用GPU主机资源",
+        )
+
     validate_callback_url(str(payload.callback_url), settings.allowed_callback_hosts)
     if payload.loss_callback_url is not None:
         validate_callback_url(
