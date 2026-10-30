@@ -16,6 +16,7 @@ from starlette.types import Scope
 from bvh_processing.api.routes import router
 from bvh_processing.config import Settings, get_settings
 from bvh_processing.errors import BvhServiceError
+from bvh_processing.services.health import HealthMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     timeout = httpx.Timeout(settings.download_timeout_seconds)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         app.state.http_client = client
+        monitor = HealthMonitor(settings)
+        app.state.health_monitor = monitor
+        monitor.start()
         if settings.dev_ui:
             from bvh_processing.api import dev_ui
 
@@ -40,6 +44,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
             yield
         finally:
+            await monitor.close()
             if settings.dev_ui:
                 from bvh_processing.api import dev_ui
 

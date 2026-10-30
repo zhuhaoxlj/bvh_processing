@@ -11,6 +11,11 @@ _DEFAULT_MDM_RESOURCE_ROOT = _PACKAGE_ROOT / "resources/mdm"
 
 
 class Settings(BaseSettings):
+    # Liveness stays independent from GPU readiness. Probes run in a bounded child process.
+    health_gpu_enabled: bool = True
+    health_gpu_required: bool = True
+    health_gpu_interval_seconds: float = Field(default=60.0, ge=1, le=86400)
+    health_gpu_timeout_seconds: float = Field(default=45.0, ge=0.1, le=300)
     download_timeout_seconds: float = 30.0
     max_file_size_mb: int = 100
     minio_allowed_hosts: str = ""

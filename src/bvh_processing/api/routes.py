@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi.responses import JSONResponse
 
 from bvh_processing.config import Settings, get_settings
 from bvh_processing.retargeting.task import run_retarget_task
@@ -50,6 +51,17 @@ router = APIRouter()
 @router.get("/health", response_model=HealthResponse, tags=["system"])
 async def health() -> HealthResponse:
     return HealthResponse(status="ok")
+
+
+@router.get("/health/details", tags=["system"], summary="缓存的 GPU 检测与运行指标")
+async def health_details(request: Request) -> dict:
+    return request.app.state.health_monitor.snapshot()
+
+
+@router.get("/health/ready", tags=["system"], summary="GPU 算法就绪检查")
+async def health_ready(request: Request) -> JSONResponse:
+    snapshot = request.app.state.health_monitor.snapshot()
+    return JSONResponse(snapshot, status_code=200 if snapshot["ready"] else 503)
 
 
 # ----------------------------------------------------------------------------
