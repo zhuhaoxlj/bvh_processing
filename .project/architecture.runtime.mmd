@@ -1,0 +1,31 @@
+%%{init: {"flowchart": {"wrappingWidth": 460, "nodeSpacing": 45, "rankSpacing": 60}} }%%
+flowchart LR
+  BI(["业务后端提交任务"]):::ext
+  VALID{"参数校验<br/>URL 白名单 · 清单 · SHA-256"}
+  ACC["受理并立即返回<br/>success + taskId"]
+  DL["下载源文件<br/>限制大小 · 校验 SHA-256"]
+  RUN["按接口分发<br/>后台执行"]
+
+  P["process 单文件处理<br/>1 去噪 · 2 平滑 · 3 脚步锁定<br/>4 循环收尾 · 5 朝向对齐"]
+  R["retarget 重定向<br/>BVH → G1 / H2 / R1<br/>tracking.npz + preview.json"]
+  M["merge 多文件合并<br/>裁剪 · 统一帧率 · 变速<br/>gapAfterSec 大于 0 时 MDM 补间"]
+  T["train 训练<br/>NPZ 校验上传 · 选空闲 GPU<br/>默认 Mock 回传演示产物"]
+
+  CB(["multipart 回调业务后端<br/>进度 · 结果 · 失败"]):::ext
+
+  BI --> VALID
+  VALID -->|通过| ACC
+  VALID -.->|不通过 422| BI
+  ACC --> DL --> RUN
+  RUN --> P --> CB
+  RUN --> R --> CB
+  RUN --> M --> CB
+  RUN --> T --> CB
+
+  classDef ext fill:#eef2f7,stroke:#5b6b7f,stroke-dasharray:4 3,color:#22303f
+  %% link BI .project/architecture.mmd #overview
+  %% link VALID src/bvh_processing/api/routes.py
+  %% link P src/bvh_processing/services/processing.py
+  %% link R src/bvh_processing/retargeting/task.py
+  %% link M src/bvh_processing/services/mdm_transition.py
+  %% link T src/bvh_processing/training/service.py

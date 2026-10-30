@@ -1,0 +1,27 @@
+%%{init: {"flowchart": {"wrappingWidth": 460, "nodeSpacing": 45, "rankSpacing": 60}} }%%
+flowchart LR
+  BI["业务后端<br/>bdca-event-performances"]:::ext
+  MINIO[("MinIO<br/>BVH · NPZ")]:::ext
+  GPU["GPU 训练控制<br/>Isaac Lab"]:::ext
+
+  subgraph SVC["bvh_processing · FastAPI 算法服务"]
+    API["接口层<br/>process · retarget · train · merge"]
+    TASK["后台任务<br/>下载校验 → 处理 → 回调"]
+    ALGO["算法内核<br/>处理 · 重定向 · MDM 补间"]
+    MDL[("模型资源<br/>MDM · MJCF")]
+  end
+
+  BI -->|提交任务| API
+  API --> TASK
+  TASK -->|读源文件| MINIO
+  TASK --> ALGO
+  ALGO --> MDL
+  TASK -->|建训练任务| GPU
+  TASK -->|multipart 回调| BI
+
+  classDef ext fill:#eef2f7,stroke:#5b6b7f,stroke-dasharray:4 3,color:#22303f
+  %% 服务内三段流水线与四个处理选项的细节见 runtime 视图。
+  %% link SVC .project/architecture.runtime.mmd #runtime
+  %% link API src/bvh_processing/api/routes.py
+  %% link TASK src/bvh_processing/services/tasks.py
+  %% link ALGO src/bvh_processing/services/processing.py

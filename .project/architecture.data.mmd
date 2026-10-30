@@ -1,0 +1,44 @@
+%%{init: {"flowchart": {"wrappingWidth": 420, "nodeSpacing": 45, "rankSpacing": 60}} }%%
+flowchart LR
+  subgraph IN["输入"]
+    MINIO[("MinIO 对象<br/>原始 BVH / NPZ")]
+    LOCAL["本地自测上传<br/>/dev/bvh（可选）"]
+  end
+
+  subgraph MEM["进程内状态（单 worker）"]
+    SPOOL["临时文件<br/>超过 8 MB 落盘"]
+    LOCK["互斥锁 + 常驻模型<br/>一次只跑一个过渡"]
+    MEMTASK["taskId 与进度<br/>仅存内存"]
+  end
+
+  subgraph RES["随包资源 resources/"]
+    STD["标准姿态文件<br/>选项 4 的末帧"]
+    MDMW["MDM 权重<br/>humanml · text_encoder"]
+    MJCF["机型 MJCF<br/>g1 · h2 · r1"]
+    DEMO["演示产物<br/>policy_demo"]
+  end
+
+  subgraph OUT["产物与回传"]
+    BVHO["处理 / 合并结果<br/>_processed · _merged.bvh"]
+    NPZO["tracking.npz<br/>preview.json"]
+    ONNX["ONNX 策略<br/>训练产物"]
+    CB[("multipart 回调<br/>业务后端")]
+  end
+
+  MINIO --> SPOOL
+  LOCAL --> SPOOL
+  SPOOL --> LOCK
+  STD --> LOCK
+  MDMW --> LOCK
+  LOCK --> BVHO
+  LOCK --> NPZO
+  MJCF -->|重定向输出| NPZO
+  SPOOL -->|训练 NPZ| ONNX
+  DEMO -->|Mock 模式| ONNX
+  BVHO --> CB
+  NPZO --> CB
+  ONNX --> CB
+  MEMTASK -.->|进度帧| CB
+
+  %% link STD src/bvh_processing/resources/standard_pose.bvh
+  %% link MDMW src/bvh_processing/resources/mdm/README.md

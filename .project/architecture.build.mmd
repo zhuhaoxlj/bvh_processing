@@ -1,0 +1,30 @@
+%%{init: {"flowchart": {"wrappingWidth": 420, "nodeSpacing": 45, "rankSpacing": 70}} }%%
+flowchart LR
+  subgraph SRC["事实源（手改这里）"]
+    CODE["源码<br/>src/bvh_processing"]
+    PROJ["pyproject.toml<br/>uv_build · 入口"]
+    LOCKF["uv.lock<br/>CUDA 12.8 PyTorch 源"]
+    VENDOR["内置 vendor<br/>MDM · whole_body_tracking"]
+    ASSETS["随包资源<br/>MDM 权重 · MJCF · 标准姿态"]
+  end
+
+  BUILD["uv build<br/>uv_build 后端"]
+  WHEEL["wheel 产物<br/>bvh_processing"]
+  CLI["控制台脚本<br/>bvh-processing = cli:main"]
+  SYNC["uv sync"]
+  VENV[(".venv<br/>CUDA 版 PyTorch")]
+  RUN["uv run bvh-processing<br/>--host --port --mock"]
+  UV["uvicorn 单 worker<br/>默认 9001"]
+
+  CODE -.-> BUILD
+  PROJ -.-> BUILD
+  VENDOR -.->|作为源码打入| BUILD
+  ASSETS -.->|作为包数据打入| BUILD
+  BUILD --> WHEEL --> CLI --> RUN
+  PROJ -.-> SYNC
+  LOCKF -.-> SYNC
+  SYNC --> VENV
+  VENV -.->|复用解释器| RUN
+  RUN --> UV
+
+  %% link UV .project/architecture.runtime.mmd #runtime
