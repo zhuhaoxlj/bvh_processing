@@ -94,7 +94,9 @@ WWW-Authenticate: Bearer
 
 | 分类 | 方法 | 路径 | 认证 | 用途 |
 |---|---|---|---|---|
-| 服务 | GET | `/health` | 否 | 健康检查 |
+| 服务 | GET | `/health` | 否 | HTTP 存活检查（兼容原响应） |
+| 服务 | GET | `/health/details` | 否 | 后台 GPU 实际运算检测缓存与基础资源指标 |
+| 服务 | GET | `/health/ready` | 否 | 算法就绪检查，GPU 异常时返回 503 |
 | GPU | GET | `/api/v1/gpus/simple` | 否 | 查询用于选择 GPU 的简化信息 |
 | GPU | GET | `/api/v1/gpus` | 否 | 查询 GPU、显存、进程和预留详情 |
 | 动作文件 | POST | `/api/v1/artifacts/motions` | 是 | 上传并校验动作 NPZ |
@@ -135,7 +137,54 @@ curl "$BASE_URL/health"
 }
 ```
 
-该接口只表示 HTTP 服务可以响应，不代表 GPU 或训练后端一定可用。
+该接口只表示 HTTP 服务可以响应，不代表 GPU 或训练后端一定可用。响应保持兼容，Docker 原有 HEALTHCHECK 无需改动。
+
+### 4.2 GPU 与运行指标
+
+`GET /health/details` 无需认证，始终返回 `200`，读取后台检测缓存，不在请求内加载模型或执行 CUDA。
+
+服务启动后立即在独立子进程中检查本地 CUDA，并执行 32×32 矩阵运算、同步 GPU、校验结果。默认每次探测结束后等待 60 秒再检测；单次最多 45 秒，超时会终止并回收探测进程。GPU 驱动异常不会阻塞 HTTP 服务，探测也不会改变业务进程的随机数状态。
+
+响应字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `status` / `ready` | 当前算法就绪状态；GPU 为必需时，检查中、失败、过期或模型缓存仍在 CPU 上都会标记未就绪 |
+| `uptime_seconds` | 当前服务进程运行时间 |
+| `gpu.status` | `checking`、`disabled`、`ok`、`unavailable`、`timeout` 或 `error` |
+| `gpu.compute_ok` | 最近一次实际 CUDA 运算及结果校验是否通过 |
+| `gpu.checked_at` / `age_seconds` | 最近一次探测完成的 UTC 时间及距今秒数 |
+| `gpu.stale` | 距离最近完成时间超过检测间隔＋超时＋10 秒时为真 |
+| `gpu.check_count` / `consecutive_failures` | 已完成检查次数、连续失败次数 |
+| `gpu.last_success_at` | 最近成功时间，尚无成功记录时为 null |
+| `gpu.duration_seconds` | 最近探测总耗时，含 Python/torch 启动 |
+| `gpu.device` / `cuda_version` / `torch_version` | 成功探测时的 GPU 名称和软件版本 |
+| `gpu.memory_free_bytes` / `memory_total_bytes` | 探测时整张 GPU 的空闲/总显存；不是业务模型独占显存 |
+| `mdm.loaded` / `device` | 业务进程的 MDM 模型是否已加载、已缓存引擎的计算设备 |
+| `resources.cpu_count` | 操作系统可见逻辑 CPU 数，不代表容器配额 |
+| `resources.host_load_average` | 主机 1/5/15 分钟负载，不是容器独立负载 |
+| `resources.process_rss_bytes` | HTTP 服务进程驻留内存 |
+| `resources.container_memory_current_bytes` / `container_memory_limit_bytes` | cgroup v2 内存使用量与上限；无限制上限为 null |
+| `resources.tmp_filesystem` | `/tmp` 所在文件系统总量、空闲量，不是目录大小 |
+
+不支持的操作系统指标会省略。状态变化会写入服务日志。接口不返回凭据、下载地址或异常堆栈。此处检测的是本地动作算法 GPU，不检测远程云训练平台、MinIO 或业务回调。
+
+### 4.3 算法就绪检查
+
+`GET /health/ready` 返回与 `/health/details` 相同的内容，就绪时返回 `200`，未就绪时返回 `503`。建议监控系统使用此接口告警；默认保留 Docker 的 `/health` 存活检查，避免单纯 GPU 故障影响其他不依赖 GPU 的接口。
+
+启动后的首次探测未完成时，就绪接口返回 `503`。检测是定时采样，故障可能在下一轮才被发现。探测恢复不代表业务进程中已缓存的 CPU 模型自动迁移到 GPU；`mdm.device` 为已加载 CPU 模型时仍判未就绪，需要维护窗口重启服务。
+
+配置环境变量（服务启动时读取）：
+
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `BVH_HEALTH_GPU_ENABLED` | `true` | 开启后台实际 CUDA 探测 |
+| `BVH_HEALTH_GPU_REQUIRED` | `true` | 本地 GPU 是算法就绪的必要条件；纯 CPU 开发环境可设为 false |
+| `BVH_HEALTH_GPU_INTERVAL_SECONDS` | `60` | 每次探测完成后等待秒数，范围 1～86400 |
+| `BVH_HEALTH_GPU_TIMEOUT_SECONDS` | `45` | 单次探测超时秒数，范围 0.1～300 |
+
+关闭检测而仍要求 GPU 时，就绪接口会保持 `503`。修改 Compose 环境变量需要重建容器，仅 restart 不会更新环境。
 
 ---
 
