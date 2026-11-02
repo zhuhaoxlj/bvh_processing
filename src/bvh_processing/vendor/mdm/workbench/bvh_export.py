@@ -457,7 +457,15 @@ def _ground_transition(
 def _write_with_template(source: bytes, frames: np.ndarray, frame_time: float) -> bytes:
     text = source.decode("utf-8-sig")
     hierarchy = re.split(r"(?m)^\s*MOTION\s*$", text, maxsplit=1)[0].rstrip()
-    lines = [hierarchy, "MOTION", f"Frames: {len(frames)}", f"Frame Time: {frame_time:.8f}"]
+    # Keep the full round-trip precision: 60/120 fps sources are 1/60 and 1/120,
+    # and truncating them (for example to 8 decimals) changes the value that
+    # merge_bvh_files reads back, which then looks like a frame-time mismatch.
+    lines = [
+        hierarchy,
+        "MOTION",
+        f"Frames: {len(frames)}",
+        f"Frame Time: {float(frame_time)!r}",
+    ]
     lines.extend(" ".join(f"{value:.6f}" for value in frame) for frame in frames)
     return ("\n".join(lines) + "\n").encode("utf-8")
 

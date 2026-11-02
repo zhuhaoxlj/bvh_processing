@@ -5,6 +5,9 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 
+from bvh_processing.config import Settings
+from bvh_processing.services.download import DownloadedBvh
+from bvh_processing.services.processing import merge_bvh_files
 from bvh_processing.vendor.mdm.data.humanml.param_util import (
     t2m_raw_offsets,
 )
@@ -468,3 +471,33 @@ def test_zero_gap_rejects_incompatible_skeleton(source_bvh: bytes) -> None:
             scale=0.01,
             up_axis="Y",
         )
+
+
+@pytest.mark.parametrize("frame_time", [1 / 240, 1 / 120, 1 / 60, 1 / 30])
+def test_written_frame_time_round_trips_without_loss(
+    source_bvh: bytes, frame_time: float
+) -> None:
+    parsed = read_bvh(source_bvh)
+    written = _write_with_template(source_bvh, parsed.frames, frame_time)
+
+    assert read_bvh(written).frame_time == frame_time
+
+
+@pytest.mark.parametrize("frame_time", [1 / 120, 1 / 60])
+def test_zero_gap_merge_keeps_high_fps_frame_time(
+    source_bvh: bytes, frame_time: float
+) -> None:
+    parsed = read_bvh(source_bvh)
+    high_fps = _write_with_template(source_bvh, parsed.frames, frame_time)
+
+    merged = merge_bvh_files(
+        [
+            DownloadedBvh(BytesIO(high_fps), "a.bvh", len(high_fps)),
+            DownloadedBvh(BytesIO(high_fps), "b.bvh", len(high_fps)),
+        ],
+        [0.0],
+        Settings(),
+    )
+
+    merged.content.seek(0)
+    assert read_bvh(merged.content.read()).frame_time == frame_time
