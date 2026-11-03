@@ -501,3 +501,36 @@ def test_zero_gap_merge_keeps_high_fps_frame_time(
 
     merged.content.seek(0)
     assert read_bvh(merged.content.read()).frame_time == frame_time
+
+
+@pytest.mark.parametrize("frame_time", [1 / 120, 1 / 60])
+@pytest.mark.parametrize("clip_count", [2, 3])
+def test_transition_merge_keeps_high_fps_frame_time(
+    source_bvh: bytes,
+    frame_time: float,
+    clip_count: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    high_fps = source_bvh.replace(
+        b"Frame Time: 0.05", f"Frame Time: {frame_time!r}".encode()
+    )
+    monkeypatch.setattr(
+        "bvh_processing.services.mdm_transition._engine_for",
+        lambda _root: FakeEngine(),
+    )
+    resources = [
+        DownloadedBvh(BytesIO(high_fps), f"{index}.bvh", len(high_fps))
+        for index in range(clip_count)
+    ]
+    merged = None
+    try:
+        merged = merge_bvh_files(resources, [0.5] * (clip_count - 1), Settings())
+        merged.content.seek(0)
+        parsed = read_bvh(merged.content.read())
+        assert parsed.frame_time == frame_time
+        assert len(parsed.frames) > clip_count * len(read_bvh(high_fps).frames)
+    finally:
+        if merged is not None:
+            merged.content.close()
+        for resource in resources:
+            resource.content.close()
