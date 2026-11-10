@@ -13,6 +13,12 @@ from bvh_processing.vendor.mdm.data.humanml_utils import HML_JOINT_NAMES, HML_EE
 import random
 from copy import copy, deepcopy
 
+
+def _root_yaw_velocity(delta: np.ndarray) -> np.ndarray:
+    half_angle = np.arctan2(delta[..., 2:3], delta[..., 0:1])
+    return (half_angle + np.pi / 2) % np.pi - np.pi / 2
+
+
 # positions (batch, joint_num, 3)
 def uniform_skeleton(positions, target_offset):
     src_skel = Skeleton(n_raw_offsets, kinematic_chain, 'cpu')
@@ -141,7 +147,7 @@ def extract_features(positions, feet_thre, n_raw_offsets, kinematic_chain, face_
     '''Root rotation and linear velocity'''
     # (seq_len-1, 1) rotation velocity along y-axis
     # (seq_len-1, 2) linear velovity on xz plane
-    r_velocity = np.arcsin(r_velocity[:, 2:3])
+    r_velocity = _root_yaw_velocity(r_velocity)
     l_velocity = velocity[:, [0, 2]]
     #     print(r_velocity.shape, l_velocity.shape, root_y.shape)
     root_data = np.concatenate([r_velocity, l_velocity, root_y[:-1]], axis=-1)
@@ -326,7 +332,7 @@ def process_file(positions, feet_thre):
     '''Root rotation and linear velocity'''
     # (seq_len-1, 1) rotation velocity along y-axis
     # (seq_len-1, 2) linear velovity on xz plane
-    r_velocity = np.arcsin(r_velocity[:, 2:3])
+    r_velocity = _root_yaw_velocity(r_velocity)
     l_velocity = velocity[:, [0, 2]]
     #     print(r_velocity.shape, l_velocity.shape, root_y.shape)
     root_data = np.concatenate([r_velocity, l_velocity, root_y[:-1]], axis=-1)

@@ -52,7 +52,7 @@ class Skeleton(object):
 
     # face_joint_idx should follow the order of right hip, left hip, right shoulder, left shoulder
     # joints (batch_size, joints_num, 3)
-    def inverse_kinematics_np(self, joints, face_joint_idx, smooth_forward=False, fix_bug=False):
+    def inverse_kinematics_np(self, joints, face_joint_idx, smooth_forward=False, fix_bug=True):
         assert len(face_joint_idx) == 4
         '''Get Forward Direction'''
         if fix_bug:
